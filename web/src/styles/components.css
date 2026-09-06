@@ -1,0 +1,350 @@
+/* ==========================================================================
+   Reusable UI components
+   ========================================================================== */
+
+/* -------------------------------- Buttons -------------------------------- */
+.btn {
+  --btn-bg: var(--surface);
+  --btn-fg: var(--text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 18px;
+  height: 46px;
+  border-radius: var(--r-md);
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  font-weight: 620;
+  font-size: 0.94rem;
+  letter-spacing: -0.01em;
+  border: 1px solid var(--border);
+  transition: transform 0.14s var(--ease), box-shadow 0.2s var(--ease),
+              background 0.2s var(--ease), opacity 0.2s var(--ease);
+  white-space: nowrap;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: var(--shadow-sm); text-decoration: none; }
+.btn:active:not(:disabled) { transform: translateY(0) scale(0.985); }
+.btn:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
+
+.btn-primary {
+  background: var(--gradient);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 6px 18px rgba(37, 64, 178, 0.32);
+}
+.btn-primary:hover:not(:disabled) { box-shadow: 0 12px 28px rgba(37, 64, 178, 0.4); }
+
+.btn-ghost { background: transparent; border-color: transparent; color: var(--text-muted); }
+.btn-ghost:hover:not(:disabled) { background: var(--surface-3); color: var(--text); box-shadow: none; }
+
+.btn-outline { background: transparent; border-color: var(--border-strong); }
+.btn-outline:hover:not(:disabled) { background: var(--surface-2); }
+
+.btn-danger { background: var(--red-bg); color: var(--red); border-color: transparent; }
+
+.btn-lg { height: 54px; font-size: 1rem; padding-inline: 24px; border-radius: var(--r-lg); }
+.btn-sm { height: 36px; font-size: 0.84rem; padding-inline: 13px; border-radius: var(--r-sm); }
+.btn-block { width: 100%; }
+.btn-icon { width: 42px; height: 42px; padding: 0; border-radius: var(--r-md); }
+
+.spinner {
+  width: 17px; height: 17px; flex: none;
+  border: 2.2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.65s linear infinite;
+}
+
+/* --------------------------------- Cards --------------------------------- */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-xs);
+}
+.card-pad { padding: 20px; }
+.card-hover { transition: transform 0.2s var(--ease), box-shadow 0.2s var(--ease), border-color 0.2s var(--ease); }
+.card-hover:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); border-color: var(--border-strong); }
+
+.section-title { font-size: 0.78rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-subtle); }
+
+/* -------------------------------- Fields --------------------------------- */
+.field { display: flex; flex-direction: column; gap: 7px; }
+.label { font-size: 0.85rem; font-weight: 600; color: var(--text); }
+.label .req { color: var(--red); margin-left: 2px; }
+.hint { font-size: 0.78rem; color: var(--text-subtle); }
+.error-text { font-size: 0.78rem; color: var(--red); font-weight: 550; }
+
+.input, .textarea, .select {
+  width: 100%;
+  padding: 13px 15px;
+  background: var(--surface-2);
+  border: 1.5px solid var(--border);
+  border-radius: var(--r-md);
+  font-size: 0.95rem;
+  color: var(--text);
+  transition: border-color 0.18s var(--ease), background 0.18s var(--ease), box-shadow 0.18s var(--ease);
+}
+.input::placeholder, .textarea::placeholder { color: var(--text-subtle); }
+.input:focus, .textarea:focus, .select:focus {
+  outline: none;
+  border-color: var(--brand-500);
+  background: var(--surface);
+  box-shadow: var(--ring);
+}
+.input.invalid, .textarea.invalid, .select.invalid { border-color: var(--red); }
+.textarea { resize: vertical; min-height: 108px; line-height: 1.6; }
+
+.select {
+  appearance: none;
+  padding-right: 42px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%237b8798' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 15px center;
+}
+
+/* Two fields side by side (date + time), stacking on narrow screens. */
+.field-pair { display: grid; gap: 14px; grid-template-columns: 1fr; }
+@media (min-width: 480px) { .field-pair { grid-template-columns: 1fr 1fr; } }
+
+/* Keep the native calendar/clock picker button clear of the leading icon. */
+.input[type='date'], .input[type='time'] { min-height: 48px; }
+.input[type='date']::-webkit-calendar-picker-indicator,
+.input[type='time']::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.65;
+  padding: 4px;
+  border-radius: 6px;
+}
+.input[type='date']::-webkit-calendar-picker-indicator:hover,
+.input[type='time']::-webkit-calendar-picker-indicator:hover { opacity: 1; background: var(--surface-3); }
+[data-theme='dark'] .input[type='date']::-webkit-calendar-picker-indicator,
+[data-theme='dark'] .input[type='time']::-webkit-calendar-picker-indicator { filter: invert(1); }
+
+.input-group { position: relative; display: flex; align-items: center; }
+.input-group .input { padding-left: 44px; }
+.input-group .lead {
+  position: absolute; left: 15px; display: flex;
+  color: var(--text-subtle); pointer-events: none;
+}
+.input-group .trail {
+  position: absolute; right: 8px; display: flex; align-items: center;
+  justify-content: center; width: 34px; height: 34px;
+  border-radius: var(--r-sm); color: var(--text-subtle);
+}
+.input-group .trail:hover { background: var(--surface-3); color: var(--text); }
+
+/* -------------------------------- Badges --------------------------------- */
+.badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 11px;
+  border-radius: var(--r-full);
+  font-size: 0.75rem;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+.badge .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
+.badge-progress { background: var(--amber-bg); color: var(--amber); }
+.badge-completed { background: var(--green-bg); color: var(--green); }
+.badge-rejected { background: var(--red-bg); color: var(--red); }
+.badge-neutral { background: var(--surface-3); color: var(--text-muted); }
+.badge-brand { background: var(--brand-50); color: var(--brand-700); }
+[data-theme='dark'] .badge-brand { background: rgba(97, 114, 238, 0.2); color: var(--brand-300); }
+
+/* --------------------------------- Chips --------------------------------- */
+.chip {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 8px 15px;
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+  border: 1.5px solid var(--border);
+  font-size: 0.85rem;
+  font-weight: 570;
+  color: var(--text-muted);
+  transition: all 0.16s var(--ease);
+  -webkit-tap-highlight-color: transparent;
+}
+.chip:hover { border-color: var(--border-strong); color: var(--text); }
+.chip.active {
+  background: var(--brand-600); border-color: var(--brand-600);
+  color: #fff; box-shadow: 0 4px 12px rgba(37, 64, 178, 0.3);
+}
+
+/* ------------------------------ Status pill ------------------------------ */
+.stat-card {
+  position: relative;
+  padding: 18px;
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  transition: transform 0.2s var(--ease), box-shadow 0.2s var(--ease);
+}
+.stat-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+.stat-card .stat-icon {
+  width: 38px; height: 38px; border-radius: var(--r-md);
+  display: grid; place-items: center; margin-bottom: 12px;
+}
+.stat-card .stat-value { font-size: 1.85rem; font-weight: 760; letter-spacing: -0.035em; line-height: 1; }
+.stat-card .stat-label { font-size: 0.79rem; color: var(--text-muted); font-weight: 560; margin-top: 5px; }
+
+/* -------------------------------- Toasts --------------------------------- */
+.toast-wrap {
+  position: fixed;
+  left: 50%; transform: translateX(-50%);
+  bottom: calc(var(--nav-h) + var(--sab) + 16px);
+  z-index: 9000;
+  display: flex; flex-direction: column; gap: 10px;
+  width: min(440px, calc(100vw - 28px));
+  pointer-events: none;
+}
+@media (min-width: 900px) { .toast-wrap { bottom: auto; top: 20px; left: auto; right: 20px; transform: none; } }
+
+.toast {
+  pointer-events: auto;
+  display: flex; align-items: flex-start; gap: 11px;
+  padding: 13px 15px;
+  border-radius: var(--r-md);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
+  animation: fade-up 0.3s var(--ease) both;
+  font-size: 0.88rem;
+}
+.toast .ico { flex: none; margin-top: 1px; }
+.toast-success .ico { color: var(--green); }
+.toast-error .ico { color: var(--red); }
+.toast-info .ico { color: var(--sky); }
+.toast .close { flex: none; color: var(--text-subtle); padding: 2px; border-radius: 6px; }
+.toast .close:hover { color: var(--text); background: var(--surface-3); }
+
+/* -------------------------------- Modals --------------------------------- */
+.modal-backdrop {
+  position: fixed; inset: 0; z-index: 8000;
+  background: var(--overlay);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: flex; align-items: flex-end; justify-content: center;
+  animation: fade-in 0.22s var(--ease);
+}
+@media (min-width: 700px) { .modal-backdrop { align-items: center; padding: 24px; } }
+
+.modal {
+  width: 100%; max-width: 560px;
+  max-height: 92vh;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl) var(--r-xl) 0 0;
+  box-shadow: var(--shadow-lg);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  animation: slide-up 0.32s var(--ease);
+  padding-bottom: var(--sab);
+}
+@media (min-width: 700px) { .modal { border-radius: var(--r-xl); animation: scale-in 0.24s var(--ease); padding-bottom: 0; } }
+
+.modal-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 18px 20px; border-bottom: 1px solid var(--border); flex: none;
+}
+.modal-body { padding: 20px; overflow-y: auto; }
+.modal-foot { padding: 16px 20px; border-top: 1px solid var(--border); display: flex; gap: 10px; flex: none; }
+.modal-grab { width: 40px; height: 4px; border-radius: 4px; background: var(--border-strong); margin: 9px auto 0; }
+@media (min-width: 700px) { .modal-grab { display: none; } }
+
+/* ------------------------------- Skeletons ------------------------------- */
+.skeleton {
+  position: relative; overflow: hidden;
+  background: var(--surface-3);
+  border-radius: var(--r-md);
+}
+.skeleton::after {
+  content: ''; position: absolute; inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.35), transparent);
+  animation: shimmer 1.35s infinite;
+}
+[data-theme='dark'] .skeleton::after { background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.07), transparent); }
+
+/* ------------------------------ Empty state ------------------------------ */
+.empty { text-align: center; padding: 46px 22px; }
+.empty .empty-ico {
+  width: 68px; height: 68px; margin: 0 auto 16px;
+  border-radius: var(--r-lg);
+  display: grid; place-items: center;
+  background: var(--surface-3); color: var(--text-subtle);
+}
+
+/* ------------------------------- Progress -------------------------------- */
+.progress-track { height: 6px; border-radius: var(--r-full); background: var(--surface-3); overflow: hidden; }
+.progress-bar { height: 100%; border-radius: var(--r-full); background: var(--gradient); transition: width 0.45s var(--ease); }
+
+.divider { height: 1px; background: var(--border); border: 0; }
+
+/* ----------------------------- Install sheet ----------------------------- */
+.install-sheet-backdrop {
+  /* Below .modal-backdrop (8000): a promotional sheet must never cover a
+     real dialog such as the camera sheet. Toasts (9000) stay on top. */
+  position: fixed; inset: 0; z-index: 7500;
+  background: var(--overlay);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: flex; align-items: flex-end; justify-content: center;
+  animation: fade-in 0.24s var(--ease);
+  padding: 0;
+}
+@media (min-width: 700px) { .install-sheet-backdrop { align-items: center; padding: 24px; } }
+
+.install-sheet {
+  position: relative;
+  width: 100%; max-width: 440px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl) var(--r-xl) 0 0;
+  box-shadow: var(--shadow-lg);
+  padding: 10px 20px calc(22px + var(--sab));
+  display: flex; flex-direction: column; gap: 18px;
+  animation: slide-up 0.34s var(--ease);
+  /* Short screens (small phones, landscape) must still reach every button. */
+  max-height: 92dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+@media (min-width: 700px) {
+  .install-sheet { border-radius: var(--r-xl); animation: scale-in 0.26s var(--ease); padding-bottom: 22px; }
+}
+
+.install-close {
+  position: absolute; top: 14px; right: 14px;
+  width: 32px; height: 32px; border-radius: 50%;
+  display: grid; place-items: center;
+  color: var(--text-subtle); background: var(--surface-3);
+}
+.install-close:hover { color: var(--text); }
+
+.install-icon {
+  width: 52px; height: 52px; flex: none;
+  border-radius: 15px;
+  display: grid; place-items: center;
+  background: var(--gradient); color: #fff;
+  box-shadow: 0 6px 16px rgba(37, 64, 178, 0.36);
+}
+
+.install-perks { list-style: none; padding: 0; margin: 0; color: var(--text-muted); }
+
+.install-steps {
+  display: flex; flex-direction: column; gap: 12px;
+  padding: 15px; border-radius: var(--r-md);
+  background: var(--surface-2); border: 1px solid var(--border);
+}
+.install-steps .step-num {
+  width: 23px; height: 23px; flex: none;
+  border-radius: 50%; display: grid; place-items: center;
+  background: var(--brand-600); color: #fff;
+  font-size: 0.72rem; font-weight: 700;
+}
+.inline-ico { display: inline; vertical-align: -3px; margin: 0 1px; }

@@ -1,0 +1,14 @@
+{
+  "name": "e-vigilance",
+  "version": "1.0.0",
+  "private": true,
+  "description": "E-Vigilance - traffic violation reporting PWA + API",
+  "scripts": {
+    "install:all": "npm --prefix server install && npm --prefix web install",
+    "dev:api": "npm --prefix server run dev",
+    "dev:web": "npm --prefix web run dev",
+    "dev:web:https": "npm --prefix web run dev:https",
+    "build": "npm --prefix web run build",
+    "start": "npm --prefix server start"
+  }
+}

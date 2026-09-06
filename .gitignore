@@ -1,0 +1,21 @@
+# dependencies
+node_modules/
+
+# secrets
+.env
+.env.local
+
+# builds
+web/dist/
+web/dev-dist/
+server/uploads/
+
+# logs & OS files
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+
+# editors
+.vscode/
+.idea/
