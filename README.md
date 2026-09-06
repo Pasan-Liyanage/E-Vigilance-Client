@@ -256,7 +256,90 @@ untouched** while the PWA can show every attachment.
 
 ---
 
-## 7. Mobile layout
+## 7. Hosting
+
+### What GitHub Pages can and cannot do
+
+GitHub Pages serves **static files only**. It cannot run Express, connect to MongoDB, sign
+JWTs, or accept uploads — so it can host `web/` (the PWA) but **not** `server/` (the API).
+
+Two ways to deploy:
+
+| Option | Where things run | When to pick it |
+|---|---|---|
+| **A. Single host** (simplest) | The Docker image serves API **and** PWA on one origin | Fewest moving parts, no CORS, media URLs just work |
+| **B. Pages + API host** | PWA on GitHub Pages, API on Render/Railway/Fly/VPS | Free static hosting on a `github.io` URL |
+
+Option A is one command — see §1 and the `Dockerfile`. Option B is set up below.
+
+### Option B — PWA on GitHub Pages
+
+The workflow at `.github/workflows/deploy-pages.yml` builds and deploys `web/` on every push to
+`main`. Four things to do once:
+
+**1. Deploy the API somewhere that runs Node.** Any host that takes a Dockerfile works:
+
+```bash
+docker build -t e-vigilance .
+docker run --env-file server/.env -p 5050:5050 e-vigilance
+```
+
+Set these in that host's environment:
+
+```env
+MONGO_URI=...                                     # the shared Atlas cluster
+JWT_SECRET=...                                    # a long random string
+NODE_ENV=production
+CORS_ORIGINS=https://<user>.github.io             # the Pages origin, no trailing slash
+PUBLIC_BASE_URL=https://<your-api-host>           # so GridFS media URLs are absolute and public
+```
+
+`CORS_ORIGINS` and `PUBLIC_BASE_URL` are the two people forget. Without the first the browser
+blocks every API call; without the second, evidence URLs point at `localhost` and never load.
+
+**2. Point the PWA at that API.** In the repo:
+*Settings → Secrets and variables → Actions → Variables → New variable*
+
+```
+Name:  VITE_API_URL
+Value: https://<your-api-host>
+```
+
+The workflow fails early with a clear message if this is missing, rather than shipping a
+frontend with no backend.
+
+**3. Turn Pages on.** *Settings → Pages → Build and deployment → Source: **GitHub Actions***.
+(Not "Deploy from a branch" — the workflow publishes an artifact.)
+
+**4. Push.** The site lands at `https://<user>.github.io/<repo>/`.
+
+### Why the sub-path needs care
+
+A project site is served from `/<repo>/`, not `/`. The build handles this via `BASE_PATH`:
+
+- `vite.config.js` sets `base`, and rewrites the manifest's `start_url`, `scope`, `id`, icons,
+  screenshots and shortcuts to include the prefix.
+- `main.jsx` passes `import.meta.env.BASE_URL` to the router as `basename`.
+- `scripts/spa-fallback.mjs` copies `index.html` to `404.html` after every build. Pages has no
+  server-side rewrite, so a deep link like `/reports/123` would otherwise 404; Pages serves
+  `404.html` for unmatched paths, which boots the app and lets the router resolve the URL.
+
+Build it locally exactly as CI does:
+
+```bash
+cd web
+VITE_API_URL=https://your-api npm run build:pages   # BASE_PATH=/E-Vigilance-Client/
+```
+
+### One real benefit of Pages
+
+Pages serves over **trusted HTTPS**, which is exactly what the real app install needs (§4).
+On `github.io` the *Install app* prompt performs a genuine WebAPK install — something neither
+plain HTTP nor a self-signed certificate can do locally.
+
+---
+
+## 8. Mobile layout
 
 The app is mobile-first and verified at **320 / 360 / 375 / 390 / 414 px** wide, across every
 screen including all seven wizard steps and the camera sheet.
@@ -273,7 +356,7 @@ them, so when checking layout, disable it first.
 
 ---
 
-## 8. Security notes
+## 9. Security notes
 
 - Passwords bcrypt-hashed (cost 10); hashes never leave the server.
 - JWT required on every report route; `GET/POST /api/reports*` are scoped to `req.userId`,
@@ -288,7 +371,7 @@ them, so when checking layout, disable it first.
 
 ---
 
-## 9. Troubleshooting
+## 10. Troubleshooting
 
 | Symptom | Cause / fix |
 |---|---|
@@ -301,4 +384,7 @@ them, so when checking layout, disable it first.
 | Install sheet never appears | Only shows on HTTPS/localhost, only once per 7 days after "Not now", never when already installed, and never during the report wizard. Clear `evigilance.install.dismissedAt` in localStorage to see it again. |
 | Phone offers "Add to Home screen" instead of "Install" | The origin is not trusted-secure. Plain HTTP *and* self-signed HTTPS both fail this test. Use Chrome port forwarding, a tunnel, or real TLS — see §3, and run `npm run check:install <url>` to confirm. |
 | Installed app still shows browser bars | The manifest was not picked up at install time. Uninstall, hard-reload, confirm DevTools → Application → Manifest shows `display: standalone`, then reinstall. |
+| Pages site loads but every API call fails | `CORS_ORIGINS` on the API does not include `https://<user>.github.io`, or `VITE_API_URL` was not set at build time. |
+| Pages site is blank / assets 404 | Built without `BASE_PATH`. Use `npm run build:pages`, or let the workflow do it. |
+| Evidence images broken on the Pages site | `PUBLIC_BASE_URL` is unset on the API, so GridFS URLs still say `localhost`. |
 | "Evidence unavailable" on a report | The media file is missing — deleted from storage, or the API host in the URL is unreachable from where you are viewing. The rest of the report still renders. |

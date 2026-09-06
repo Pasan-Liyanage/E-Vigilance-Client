@@ -17,9 +17,12 @@ try {
   document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
 } catch { /* private mode */ }
 
+// import.meta.env.BASE_URL is '/' locally and '/<repo>/' on GitHub Pages.
+const basename = import.meta.env.BASE_URL.replace(/\/$/, '');
+
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <BrowserRouter>
+    <BrowserRouter basename={basename}>
       <ToastProvider>
         <AuthProvider>
           <App />

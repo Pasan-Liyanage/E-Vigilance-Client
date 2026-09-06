@@ -5,11 +5,18 @@ import basicSsl from '@vitejs/plugin-basic-ssl';
 
 const API_TARGET = process.env.VITE_API_PROXY || 'http://localhost:5050';
 
+// GitHub Pages serves a project site from /<repo>/, so every absolute asset
+// path has to carry that prefix. Locally and in Docker this stays '/'.
+//   BASE_PATH=/E-Vigilance-Client/ npm run build
+const BASE = process.env.BASE_PATH || '/';
+const withBase = (p) => `${BASE}${p.replace(/^\//, '')}`;
+
 // `npm run dev:https` serves over HTTPS with a self-signed certificate, which
 // browsers require before granting camera, microphone or GPS on a real phone.
 const HTTPS = process.env.HTTPS === 'true';
 
 export default defineConfig({
+  base: BASE,
   plugins: [
     react(),
     ...(HTTPS ? [basicSsl()] : []),
@@ -18,7 +25,7 @@ export default defineConfig({
       includeAssets: ['favicon-64.png', 'apple-touch-icon.png'],
       manifest: {
         // A stable id keeps this the *same* installed app across deploys.
-        id: '/?source=pwa',
+        id: withBase('?source=pwa'),
         name: 'E-Vigilance - Report Traffic Violations',
         short_name: 'E-Vigilance',
         description:
@@ -31,33 +38,34 @@ export default defineConfig({
         display_override: ['standalone', 'minimal-ui'],
         launch_handler: { client_mode: 'navigate-existing' },
         orientation: 'portrait',
-        start_url: '/',
-        scope: '/',
+        start_url: BASE,
+        scope: BASE,
         lang: 'en',
         dir: 'ltr',
         prefer_related_applications: false,
         categories: ['government', 'utilities'],
         icons: [
-          { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
-          { src: '/icon-512.png', sizes: '512x512', type: 'image/png' },
-          { src: '/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+          { src: withBase('icon-192.png'), sizes: '192x192', type: 'image/png' },
+          { src: withBase('icon-512.png'), sizes: '512x512', type: 'image/png' },
+          { src: withBase('icon-maskable-512.png'), sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
         shortcuts: [
-          { name: 'Report a violation', short_name: 'Report', url: '/report' },
-          { name: 'My reports', short_name: 'Reports', url: '/reports' },
+          { name: 'Report a violation', short_name: 'Report', url: withBase('report') },
+          { name: 'My reports', short_name: 'Reports', url: withBase('reports') },
         ],
         // Screenshots turn Chrome's minimal install bar into the full
         // "Install app" dialog, the one that creates a real app entry.
         screenshots: [
-          { src: '/screenshots/phone-1-dashboard.png', sizes: '1080x1920', type: 'image/png', form_factor: 'narrow', label: 'Your dashboard and report history' },
-          { src: '/screenshots/phone-2-report.png', sizes: '1080x1920', type: 'image/png', form_factor: 'narrow', label: 'Capture photo, video and voice evidence' },
-          { src: '/screenshots/phone-3-detail.png', sizes: '1080x1920', type: 'image/png', form_factor: 'narrow', label: 'Track the status of every report' },
-          { src: '/screenshots/desktop-1-dashboard.png', sizes: '1920x1080', type: 'image/png', form_factor: 'wide', label: 'Dashboard' },
-          { src: '/screenshots/desktop-2-reports.png', sizes: '1920x1080', type: 'image/png', form_factor: 'wide', label: 'My reports' },
+          { src: withBase('screenshots/phone-1-dashboard.png'), sizes: '1080x1920', type: 'image/png', form_factor: 'narrow', label: 'Your dashboard and report history' },
+          { src: withBase('screenshots/phone-2-report.png'), sizes: '1080x1920', type: 'image/png', form_factor: 'narrow', label: 'Capture photo, video and voice evidence' },
+          { src: withBase('screenshots/phone-3-detail.png'), sizes: '1080x1920', type: 'image/png', form_factor: 'narrow', label: 'Track the status of every report' },
+          { src: withBase('screenshots/desktop-1-dashboard.png'), sizes: '1920x1080', type: 'image/png', form_factor: 'wide', label: 'Dashboard' },
+          { src: withBase('screenshots/desktop-2-reports.png'), sizes: '1920x1080', type: 'image/png', form_factor: 'wide', label: 'My reports' },
         ],
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,woff2}', 'icon-*.png', 'favicon-*.png', 'apple-touch-icon.png'],
+        navigateFallback: `${BASE}index.html`,
         navigateFallbackDenylist: [/^\/api\//],
         runtimeCaching: [
           {

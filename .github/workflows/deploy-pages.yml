@@ -1,0 +1,74 @@
+# Publishes the PWA (web/) to GitHub Pages.
+#
+# Pages is static-only, so this deploys the FRONTEND ONLY. The Express API in
+# server/ must run somewhere that executes Node (Render, Railway, Fly.io, a VPS,
+# the Docker image in this repo...). Point the frontend at it by setting a
+# repository variable named VITE_API_URL, e.g. https://e-vigilance-api.onrender.com
+#   Settings -> Secrets and variables -> Actions -> Variables -> New variable
+name: Deploy PWA to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'web/**'
+      - '.github/workflows/deploy-pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Let a running deploy finish; queue at most one more.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Fail early if the API URL is not configured
+        run: |
+          if [ -z "${{ vars.VITE_API_URL }}" ]; then
+            echo "::error::VITE_API_URL repository variable is not set."
+            echo "The deployed PWA would have no backend to talk to."
+            echo "Set it under Settings -> Secrets and variables -> Actions -> Variables."
+            exit 1
+          fi
+
+      - name: Build
+        working-directory: web
+        env:
+          # Project sites are served from https://<user>.github.io/<repo>/
+          BASE_PATH: /${{ github.event.repository.name }}/
+          VITE_API_URL: ${{ vars.VITE_API_URL }}
+        run: npm run build
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

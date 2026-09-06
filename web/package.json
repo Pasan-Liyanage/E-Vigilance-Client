@@ -6,9 +6,10 @@
   "scripts": {
     "dev": "vite",
     "dev:https": "HTTPS=true vite",
-    "build": "vite build",
+    "build": "vite build && node scripts/spa-fallback.mjs",
     "preview": "vite preview",
-    "check:install": "node scripts/check-installability.mjs"
+    "check:install": "node scripts/check-installability.mjs",
+    "build:pages": "BASE_PATH=/E-Vigilance-Client/ npm run build"
   },
   "dependencies": {
     "react": "^18.3.1",
