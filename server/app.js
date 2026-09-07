@@ -25,22 +25,40 @@ const allowed = (process.env.CORS_ORIGINS || '')
   .map((o) => o.trim())
   .filter(Boolean);
 
+/** Same-origin requests still carry an Origin header on POST, so compare hosts. */
+function isSameOrigin(req, origin) {
+  try {
+    return new URL(origin).host === (req.headers['x-forwarded-host'] || req.headers.host);
+  } catch {
+    return false;
+  }
+}
+
 app.use(
-  cors({
-    origin(origin, cb) {
-      // No origin = same-origin, curl or a native webview.
-      if (!origin) return cb(null, true);
-      if (!allowed.length || allowed.includes(origin)) return cb(null, true);
-      // Any LAN address is allowed in development so a real phone can connect.
-      if (
-        process.env.NODE_ENV !== 'production' &&
-        /^https?:\/\/(localhost|127\.0\.0\.1|\d+\.\d+\.\d+\.\d+)(:\d+)?$/.test(origin)
-      ) {
-        return cb(null, true);
-      }
-      cb(new Error(`Origin ${origin} is not allowed by CORS`));
-    },
-    credentials: true,
+  cors((req, done) => {
+    const origin = req.headers.origin;
+
+    // No Origin at all = same-origin GET, curl, or a native webview.
+    if (!origin) return done(null, { origin: true, credentials: true });
+
+    // The app talking to its own API. Browsers send Origin on POST even when
+    // the page and the API share a host, so this must be allowed explicitly.
+    if (isSameOrigin(req, origin)) return done(null, { origin: true, credentials: true });
+
+    if (allowed.includes(origin)) return done(null, { origin: true, credentials: true });
+
+    // Any LAN address is allowed in development so a real phone can connect.
+    if (
+      process.env.NODE_ENV !== 'production' &&
+      /^https?:\/\/(localhost|127\.0\.0\.1|\d+\.\d+\.\d+\.\d+)(:\d+)?$/.test(origin)
+    ) {
+      return done(null, { origin: true, credentials: true });
+    }
+
+    // Reject as a clear 403 rather than letting it surface as a 500.
+    const err = new Error(`Origin ${origin} is not allowed to call this API.`);
+    err.status = 403;
+    return done(err);
   })
 );
 
