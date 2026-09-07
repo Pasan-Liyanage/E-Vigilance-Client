@@ -1,8 +1,8 @@
-# Keep the serverless bundle small - none of this is needed at runtime.
+# Excluded from the upload to Vercel. Note this also removes files from the
+# BUILD, not just the runtime bundle, so anything the build touches must stay.
+# web/scripts is required by web's build script (spa-fallback) - do not add it.
 Dockerfile
 docker-compose.yml
 render.yaml
 .github
-README.md
 **/dev-dist
-web/scripts
