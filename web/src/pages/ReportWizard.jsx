@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import { isDirectUploadEnabled, uploadToCloudinary } from '../api/cloudinary';
+import { compressImage } from '../utils/compressImage';
 import { useToast } from '../context/ToastContext';
 import { useOnline } from '../hooks/useOnline';
 import { VEHICLE_TYPES, ISSUE_TYPES, MAX_EVIDENCE_FILES, MAX_FILE_MB } from '../constants';
@@ -60,6 +61,7 @@ export default function ReportWizard() {
   const [media, setMedia] = useState([]);      // { id, file, url, kind }
   const [voiceNote, setVoiceNote] = useState(null);
   const [errors, setErrors] = useState({});
+  const [preparing, setPreparing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [progress, setProgress] = useState(0);
   const [done, setDone] = useState(null);
@@ -89,7 +91,7 @@ export default function ReportWizard() {
    * Adds picked/captured files. Object URLs and toasts are created here rather
    * than inside the state updater, which React may run twice in StrictMode.
    */
-  const addFiles = useCallback((files) => {
+  const addFiles = useCallback(async (files) => {
     const incoming = Array.from(files || []);
     if (!incoming.length) return;
 
@@ -99,18 +101,26 @@ export default function ReportWizard() {
       return;
     }
 
+    setPreparing(true);
     const accepted = [];
-    for (const file of incoming.slice(0, room)) {
-      if (file.size > MAX_FILE_MB * 1024 * 1024) {
-        toast.error(`"${file.name}" is larger than ${MAX_FILE_MB} MB and was skipped.`);
-        continue;
+    try {
+      for (const original of incoming.slice(0, room)) {
+        // Large photos are downscaled here so they upload quickly and stay
+        // under the request-size cap of serverless hosts.
+        const file = await compressImage(original);
+        if (file.size > MAX_FILE_MB * 1024 * 1024) {
+          toast.error(`"${original.name}" is larger than ${MAX_FILE_MB} MB and was skipped.`);
+          continue;
+        }
+        accepted.push({
+          id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          file,
+          kind: file.type.startsWith('video/') ? 'video' : 'image',
+          url: URL.createObjectURL(file),
+        });
       }
-      accepted.push({
-        id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        file,
-        kind: file.type.startsWith('video/') ? 'video' : 'image',
-        url: URL.createObjectURL(file),
-      });
+    } finally {
+      setPreparing(false);
     }
     if (incoming.length > room) {
       toast.info(`Only ${room} more file${room === 1 ? '' : 's'} could be added.`);
@@ -299,7 +309,7 @@ export default function ReportWizard() {
         <div key={step} className="animate-in mt-20">
           <Current
             form={form} set={set} errors={errors}
-            media={media} addFiles={addFiles} removeMedia={removeMedia}
+            media={media} addFiles={addFiles} removeMedia={removeMedia} preparing={preparing}
             voiceNote={voiceNote} setVoiceNote={setVoiceNote}
             resolvedIssue={resolvedIssue} goTo={goTo} toast={toast}
           />
@@ -360,7 +370,7 @@ export default function ReportWizard() {
 }
 
 /* ============================ Step 1 - Evidence =========================== */
-function StepEvidence({ media, addFiles, removeMedia }) {
+function StepEvidence({ media, addFiles, removeMedia, preparing }) {
   const photoInput = useRef(null);
   const videoInput = useRef(null);
   const [camera, setCamera] = useState(null); // 'photo' | 'video' | null
@@ -397,6 +407,12 @@ function StepEvidence({ media, addFiles, removeMedia }) {
         ref={videoInput} type="file" accept="video/*" multiple hidden
         onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }}
       />
+
+      {preparing && (
+        <div className="row gap-10 small muted">
+          <span className="spinner" style={{ color: 'var(--brand-600)' }} /> Preparing your files…
+        </div>
+      )}
 
       {media.length > 0 && (
         <div className="stack gap-10">
