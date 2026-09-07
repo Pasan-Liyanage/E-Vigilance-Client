@@ -109,7 +109,11 @@ export default function VoiceRecorder({ value, onChange }) {
         chunksRef.current = [];
         if (blob.size) {
           const ext = type.includes('mp4') ? 'm4a' : type.includes('ogg') ? 'ogg' : 'webm';
-          onChange(new File([blob], `voice-note-${Date.now()}.${ext}`, { type }));
+          // Always give the file a concrete type - a blank one makes the
+          // browser omit Content-Type on upload.
+          onChange(
+            new File([blob], `voice-note-${Date.now()}.${ext}`, { type: type || 'audio/webm' })
+          );
         }
         teardown();
         setRecording(false);

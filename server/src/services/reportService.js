@@ -99,8 +99,7 @@ class ReportService {
           uploaded.push(await StorageService.upload(file, baseUrl));
         }
         if (files.voiceNote && files.voiceNote[0]) {
-          voiceNote = await StorageService.upload(files.voiceNote[0], baseUrl);
-          voiceNote.kind = 'audio';
+          voiceNote = await StorageService.upload(files.voiceNote[0], baseUrl, 'audio');
         }
       } catch (err) {
         await Promise.all(

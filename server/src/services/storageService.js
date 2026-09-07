@@ -2,6 +2,33 @@ const mongoose = require('mongoose');
 const { getBucket } = require('../config/database');
 const { cloudinary, isCloudinaryConfigured } = require('../config/cloudinary');
 const ApiError = require('../utils/ApiError');
+const { mimeFromName, extensionOf } = require('../utils/mediaTypes');
+
+/** Types that carry no real information about the file. */
+const VAGUE_TYPES = new Set([
+  '', 'text/plain', 'application/octet-stream', 'binary/octet-stream', 'application/unknown',
+]);
+
+/**
+ * Some browsers omit a part's Content-Type, which arrives as text/plain.
+ * Storing that would later serve a photo as text, so resolve a real type from
+ * the filename before anything is persisted.
+ */
+function normaliseMime(mimetype, filename, expectedKind) {
+  const bare = String(mimetype || '').toLowerCase().split(';')[0].trim();
+  if (!VAGUE_TYPES.has(bare)) return mimetype;
+
+  const guessed = mimeFromName(filename);
+  if (!guessed) return 'application/octet-stream';
+
+  // Containers like .webm and .ogg hold either audio or video. When the caller
+  // knows which field this is (a voice note, say), trust that over the guess.
+  const [top, sub] = guessed.split('/');
+  if (expectedKind && top !== expectedKind && ['webm', 'ogg', 'mp4'].includes(sub)) {
+    return `${expectedKind}/${sub}`;
+  }
+  return guessed;
+}
 
 /**
  * Stores evidence media either in Cloudinary or in MongoDB GridFS.
@@ -30,11 +57,14 @@ class StorageService {
    * Uploads one multer in-memory file.
    * @param {object} file   multer file ({ buffer, mimetype, originalname, size })
    * @param {string} baseUrl absolute origin of this API, used to build GridFS URLs
+   * @param {'image'|'video'|'audio'} [expectedKind] disambiguates containers
+   *   such as .webm that can hold either audio or video
    * @returns {Promise<object>} a media sub-document
    */
-  async upload(file, baseUrl) {
+  async upload(file, baseUrl, expectedKind) {
     if (!file || !file.buffer) throw ApiError.badRequest('No file received.');
-    const kind = detectKind(file.mimetype, file.originalname);
+    file = { ...file, mimetype: normaliseMime(file.mimetype, file.originalname, expectedKind) };
+    const kind = expectedKind || detectKind(file.mimetype, file.originalname);
     return this.driver === 'cloudinary'
       ? this.#toCloudinary(file, kind)
       : this.#toGridFS(file, kind, baseUrl);
@@ -108,6 +138,8 @@ class StorageService {
     const total = doc.length;
     const type = doc.contentType || 'application/octet-stream';
     res.setHeader('Content-Type', type);
+    // Never let a browser re-interpret stored evidence as something executable.
+    res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Accept-Ranges', 'bytes');
     res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
 
@@ -156,6 +188,7 @@ function detectKind(mimetype = '', filename = '') {
   if (m.startsWith('image/')) return 'image';
   if (m.startsWith('video/')) return 'video';
   if (m.startsWith('audio/')) return 'audio';
+  // A vague type tells us nothing - fall through to the extension below.
 
   const ext = String(filename).toLowerCase().split('.').pop();
   if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif', 'bmp'].includes(ext)) return 'image';
@@ -170,3 +203,4 @@ function trimSlash(url) {
 
 module.exports = new StorageService();
 module.exports.detectKind = detectKind;
+module.exports.normaliseMime = normaliseMime;

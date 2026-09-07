@@ -143,7 +143,7 @@ export default function CameraCapture({ open, mode = 'photo', onCapture, onClose
       chunksRef.current = [];
       if (blob.size) {
         const ext = type.includes('mp4') ? 'mp4' : 'webm';
-        onCapture(new File([blob], `video-${Date.now()}.${ext}`, { type }));
+        onCapture(new File([blob], `video-${Date.now()}.${ext}`, { type: type || 'video/webm' }));
       }
       stop();
       onClose();

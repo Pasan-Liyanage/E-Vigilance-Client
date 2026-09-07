@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import { isDirectUploadEnabled, uploadToCloudinary } from '../api/cloudinary';
 import { compressImage } from '../utils/compressImage';
+import { ensureFileType } from '../utils/fileType';
 import { useToast } from '../context/ToastContext';
 import { useOnline } from '../hooks/useOnline';
 import { VEHICLE_TYPES, ISSUE_TYPES, MAX_EVIDENCE_FILES, MAX_FILE_MB } from '../constants';
@@ -104,12 +105,15 @@ export default function ReportWizard() {
     setPreparing(true);
     const accepted = [];
     try {
-      for (const original of incoming.slice(0, room)) {
+      for (const picked of incoming.slice(0, room)) {
+        // Some Android pickers return a File with an empty type; give it one
+        // before anything else looks at it.
+        const original = ensureFileType(picked, picked.type?.startsWith('video/') ? 'video' : 'image');
         // Large photos are downscaled here so they upload quickly and stay
         // under the request-size cap of serverless hosts.
         const file = await compressImage(original);
         if (file.size > MAX_FILE_MB * 1024 * 1024) {
-          toast.error(`"${original.name}" is larger than ${MAX_FILE_MB} MB and was skipped.`);
+          toast.error(`"${picked.name}" is larger than ${MAX_FILE_MB} MB and was skipped.`);
           continue;
         }
         accepted.push({
@@ -237,8 +241,14 @@ export default function ReportWizard() {
         res = await api.createReportJson({ ...fields, evidence, voiceNote: voice });
       } else {
         const fd = new FormData();
-        media.forEach((m) => fd.append('evidence', m.file, m.file.name));
-        if (voiceNote) fd.append('voiceNote', voiceNote, voiceNote.name);
+        media.forEach((m) => {
+          const f = ensureFileType(m.file, m.kind);
+          fd.append('evidence', f, f.name);
+        });
+        if (voiceNote) {
+          const v = ensureFileType(voiceNote, 'audio');
+          fd.append('voiceNote', v, v.name);
+        }
         Object.entries(fields).forEach(([k, v]) => {
           if (v !== undefined) fd.append(k, v);
         });
