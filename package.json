@@ -9,6 +9,7 @@
     "dev:web": "npm --prefix web run dev",
     "dev:web:https": "npm --prefix web run dev:https",
     "build": "npm --prefix web run build",
-    "start": "npm --prefix server start"
+    "start": "npm --prefix server start",
+    "vercel-build": "npm --prefix web run build"
   }
 }

@@ -1,0 +1,8 @@
+# Keep the serverless bundle small - none of this is needed at runtime.
+Dockerfile
+docker-compose.yml
+render.yaml
+.github
+README.md
+**/dev-dist
+web/scripts

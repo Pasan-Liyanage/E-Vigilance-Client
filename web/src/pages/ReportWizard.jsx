@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
+import { isDirectUploadEnabled, uploadToCloudinary } from '../api/cloudinary';
 import { useToast } from '../context/ToastContext';
 import { useOnline } from '../hooks/useOnline';
 import { VEHICLE_TYPES, ISSUE_TYPES, MAX_EVIDENCE_FILES, MAX_FILE_MB } from '../constants';
@@ -186,21 +187,54 @@ export default function ReportWizard() {
     setSubmitting(true);
     setProgress(0);
 
-    const fd = new FormData();
-    media.forEach((m) => fd.append('evidence', m.file, m.file.name));
-    if (voiceNote) fd.append('voiceNote', voiceNote, voiceNote.name);
-    fd.append('vehicleType', form.vehicleType);
-    fd.append('vehicleNumber', form.vehicleNumber.trim());
-    if (form.vehicleModel.trim()) fd.append('vehicleModel', form.vehicleModel.trim());
-    fd.append('dateTime', new Date(form.dateTime).toISOString());
-    fd.append('issueType', resolvedIssue);
-    if (form.location.trim()) fd.append('location', form.location.trim());
-    if (form.latitude != null) fd.append('latitude', String(form.latitude));
-    if (form.longitude != null) fd.append('longitude', String(form.longitude));
-    if (form.additionalDetails.trim()) fd.append('additionalDetails', form.additionalDetails.trim());
+    // Fields both submission paths share.
+    const fields = {
+      vehicleType: form.vehicleType,
+      vehicleNumber: form.vehicleNumber.trim(),
+      vehicleModel: form.vehicleModel.trim() || undefined,
+      dateTime: new Date(form.dateTime).toISOString(),
+      issueType: resolvedIssue,
+      location: form.location.trim() || undefined,
+      latitude: form.latitude != null ? String(form.latitude) : undefined,
+      longitude: form.longitude != null ? String(form.longitude) : undefined,
+      additionalDetails: form.additionalDetails.trim() || undefined,
+    };
 
     try {
-      const res = await api.createReport(fd, setProgress);
+      let res;
+
+      if (isDirectUploadEnabled() && (media.length || voiceNote)) {
+        // Media goes straight to Cloudinary, so serverless body caps never
+        // apply. Progress is the combined byte count across every file.
+        const totalBytes =
+          media.reduce((n, m) => n + m.file.size, 0) + (voiceNote ? voiceNote.size : 0);
+        const loaded = new Map();
+        const bump = (key, bytes) => {
+          loaded.set(key, bytes);
+          const sum = [...loaded.values()].reduce((a, b) => a + b, 0);
+          setProgress(totalBytes ? Math.min(99, Math.round((sum / totalBytes) * 100)) : 0);
+        };
+
+        const evidence = [];
+        for (const m of media) {
+          evidence.push(await uploadToCloudinary(m.file, (b) => bump(m.id, b)));
+        }
+        const voice = voiceNote
+          ? await uploadToCloudinary(voiceNote, (b) => bump('voice', b))
+          : null;
+
+        setProgress(100);
+        res = await api.createReportJson({ ...fields, evidence, voiceNote: voice });
+      } else {
+        const fd = new FormData();
+        media.forEach((m) => fd.append('evidence', m.file, m.file.name));
+        if (voiceNote) fd.append('voiceNote', voiceNote, voiceNote.name);
+        Object.entries(fields).forEach(([k, v]) => {
+          if (v !== undefined) fd.append(k, v);
+        });
+        res = await api.createReport(fd, setProgress);
+      }
+
       try { localStorage.removeItem(DRAFT_KEY); } catch { /* private mode */ }
       media.forEach((m) => URL.revokeObjectURL(m.url));
       setDone(res.report);

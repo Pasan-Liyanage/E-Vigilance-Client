@@ -60,11 +60,14 @@ Everything lives in `server/.env` (copy from `server/.env.example`).
 | `CORS_ORIGINS` | Comma-separated browser origins allowed to call the API |
 | `STORAGE_DRIVER` | `auto` (default), `gridfs`, or `cloudinary` |
 | `MAX_UPLOAD_MB` | Per-file upload limit (default `50`) |
-| `CLOUDINARY_*` | Optional — fill in to move media to Cloudinary |
+| `CLOUDINARY_CLOUD_NAME` | Required for direct browser uploads — the API only accepts media URLs on this account |
+| `CLOUDINARY_API_KEY` / `_SECRET` | Optional — only needed to upload *through* the API rather than from the browser |
 | `PUBLIC_BASE_URL` | Optional — absolute origin used when building GridFS media URLs |
 
 The frontend needs no configuration for local work (Vite proxies `/api` to the server).
-If you host the PWA separately from the API, set `VITE_API_URL` in `web/.env`.
+If you host the PWA separately from the API, set `VITE_API_URL` in `web/.env`. To upload media
+straight from the browser (required on Vercel), also set `VITE_CLOUDINARY_CLOUD_NAME` and
+`VITE_CLOUDINARY_UPLOAD_PRESET` — see `web/.env.example`.
 
 ### Media storage
 
@@ -267,17 +270,69 @@ Two ways to deploy:
 
 | Option | Where things run | When to pick it |
 |---|---|---|
-| **A. Single host** (simplest) | The Docker image serves API **and** PWA on one origin | Fewest moving parts, no CORS, media URLs just work |
-| **B. Pages + API host** | PWA on GitHub Pages, API on Render/Railway/Fly/VPS | Free static hosting on a `github.io` URL |
+| **A. Vercel** (best free demo) | PWA + API on Vercel, media on Cloudinary | Free, no sleeping, fast cold starts, one origin |
+| **B. Render / any Docker host** | The Docker image serves API **and** PWA on one origin | No size limits at all; free tier sleeps after 15 min |
+| **C. GitHub Pages + separate API** | PWA on Pages, API elsewhere | A `github.io` URL, but two things to configure |
 
-Option A is one command — see §1 and the `Dockerfile`. Option B is set up below.
+All three are set up in this repo: `vercel.json`, `render.yaml`/`Dockerfile`, and
+`.github/workflows/deploy-pages.yml`.
 
-### Option B — PWA on GitHub Pages
+### Option A — Vercel (free)
+
+Vercel runs the API as a serverless function and serves the PWA statically from the same
+origin, so there is no CORS to configure. One platform limit shapes the design:
+
+> **Vercel caps both the request and the response body of a function at 4.5 MB**
+> (`413: FUNCTION_PAYLOAD_TOO_LARGE`) on *every* plan. A phone video is far larger, and even
+> modern phone photos are often 3–8 MB. Streaming GridFS media back through the function hits
+> the same cap.
+
+So on Vercel, media must not travel through the API at all. The browser uploads **directly to
+Cloudinary** and the API only ever stores the resulting URLs; playback comes from Cloudinary's
+CDN. `web/src/api/cloudinary.js` does the upload, and the server validates that every
+submitted URL is an `https://res.cloudinary.com/<your-cloud>/…` address so arbitrary links
+cannot be injected into a report.
+
+**1. Create an unsigned Cloudinary upload preset.** Cloudinary dashboard → *Settings → Upload
+→ Upload presets → Add unsigned preset*. Note the preset name and your cloud name. Unsigned
+means no API secret is needed in the browser — restrict the preset there (allowed formats, max
+file size) rather than trusting the client.
+
+**2. Import the repo at [vercel.com/new](https://vercel.com/new).** `vercel.json` supplies the
+build and routing; leave the framework preset as *Other*.
+
+**3. Set the environment variables** (Project → Settings → Environment Variables):
+
+```env
+MONGO_URI=mongodb+srv://...            # the shared Atlas cluster
+JWT_SECRET=<a long random string>
+CLOUDINARY_CLOUD_NAME=ds5ugvgez        # server-side: validates submitted URLs
+
+VITE_CLOUDINARY_CLOUD_NAME=ds5ugvgez   # build-time: browser uploads
+VITE_CLOUDINARY_UPLOAD_PRESET=<your unsigned preset name>
+```
+
+Leave `VITE_API_URL` **unset** — the PWA and API share an origin here, so relative `/api/...`
+calls are correct.
+
+**4. Deploy.** Everything lands on one HTTPS URL, which also means the install prompt performs
+a real app install (§4).
+
+Without the two `VITE_CLOUDINARY_*` values the app falls back to uploading through the API into
+GridFS, which works locally and in Docker but **will fail on Vercel** for anything over 4.5 MB.
+
+### Option B — Render / any Docker host
+
+Option B has no payload limits, so it needs no Cloudinary setup — media goes through the API
+into GridFS as normal.
+
+### Option C — PWA on GitHub Pages
 
 The workflow at `.github/workflows/deploy-pages.yml` builds and deploys `web/` on every push to
 `main`. Four things to do once:
 
-**1. Deploy the API somewhere that runs Node.** Any host that takes a Dockerfile works:
+**1. Deploy the API somewhere that runs Node** (Option A or B above). Any host that takes a
+Dockerfile works:
 
 ```bash
 docker build -t e-vigilance .
@@ -384,6 +439,8 @@ them, so when checking layout, disable it first.
 | Install sheet never appears | Only shows on HTTPS/localhost, only once per 7 days after "Not now", never when already installed, and never during the report wizard. Clear `evigilance.install.dismissedAt` in localStorage to see it again. |
 | Phone offers "Add to Home screen" instead of "Install" | The origin is not trusted-secure. Plain HTTP *and* self-signed HTTPS both fail this test. Use Chrome port forwarding, a tunnel, or real TLS — see §3, and run `npm run check:install <url>` to confirm. |
 | Installed app still shows browser bars | The manifest was not picked up at install time. Uninstall, hard-reload, confirm DevTools → Application → Manifest shows `display: standalone`, then reinstall. |
+| Uploads fail with `413 FUNCTION_PAYLOAD_TOO_LARGE` | You are on Vercel without direct uploads configured. Set the two `VITE_CLOUDINARY_*` variables and redeploy — see §7 Option A. |
+| Report rejected: "must be an https URL on the configured Cloudinary account" | `CLOUDINARY_CLOUD_NAME` on the server does not match the cloud the browser uploaded to. |
 | Pages site loads but every API call fails | `CORS_ORIGINS` on the API does not include `https://<user>.github.io`, or `VITE_API_URL` was not set at build time. |
 | Pages site is blank / assets 404 | Built without `BASE_PATH`. Use `npm run build:pages`, or let the workflow do it. |
 | Evidence images broken on the Pages site | `PUBLIC_BASE_URL` is unset on the API, so GridFS URLs still say `localhost`. |

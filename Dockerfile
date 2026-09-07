@@ -39,6 +39,7 @@ ENV NODE_ENV=production \
 WORKDIR /app
 
 COPY --chown=node:node server/server.js ./server/server.js
+COPY --chown=node:node server/app.js ./server/app.js
 COPY --chown=node:node server/package.json ./server/package.json
 COPY --chown=node:node server/src ./server/src
 COPY --from=server-deps --chown=node:node /app/server/node_modules ./server/node_modules

@@ -127,7 +127,10 @@ export const api = {
   me: () => request('/api/auth/me'),
   updateProfile: (payload) => request('/api/auth/me', { method: 'PATCH', body: payload }),
 
+  // Multipart: files stream through the API (local, Docker, Render).
   createReport: (formData, onProgress) => upload('/api/reports', formData, onProgress),
+  // JSON: media was already uploaded to Cloudinary, so only URLs are sent.
+  createReportJson: (payload) => request('/api/reports', { method: 'POST', body: payload }),
   listReports: (params = {}) => {
     const qs = new URLSearchParams(
       Object.entries(params).filter(

@@ -3,6 +3,58 @@ const StorageService = require('./storageService');
 const ApiError = require('../utils/ApiError');
 
 const REQUIRED = ['vehicleType', 'vehicleNumber', 'dateTime', 'issueType'];
+const KINDS = ['image', 'video', 'audio'];
+const MAX_DIRECT_ITEMS = 10;
+
+/**
+ * Media the browser uploaded straight to Cloudinary arrives as URLs rather
+ * than files. Never trust those blindly: only accept https URLs on the
+ * configured Cloudinary account, so a caller cannot store a link to anything
+ * else in a report.
+ */
+function validateDirectMedia(raw, { field }) {
+  if (raw === undefined || raw === null || raw === '') return [];
+
+  let items = raw;
+  if (typeof items === 'string') {
+    try { items = JSON.parse(items); } catch { throw ApiError.badRequest(`${field} is not valid JSON.`); }
+  }
+  if (!Array.isArray(items)) items = [items];
+  if (items.length > MAX_DIRECT_ITEMS) {
+    throw ApiError.badRequest(`Attach at most ${MAX_DIRECT_ITEMS} photos or videos.`);
+  }
+
+  const cloud = process.env.CLOUDINARY_CLOUD_NAME;
+  if (!cloud) {
+    throw ApiError.badRequest(
+      'Direct uploads are not enabled on this server (CLOUDINARY_CLOUD_NAME is unset).'
+    );
+  }
+  // https://res.cloudinary.com/<cloud>/... - the only shape we will store.
+  const allowed = new RegExp(`^https://res\\.cloudinary\\.com/${cloud.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/`);
+
+  return items.map((item, i) => {
+    if (!item || typeof item !== 'object') {
+      throw ApiError.badRequest(`${field}[${i}] is not an object.`);
+    }
+    const url = String(item.url || '');
+    if (!allowed.test(url)) {
+      throw ApiError.badRequest(
+        `${field}[${i}] must be an https URL on the configured Cloudinary account.`
+      );
+    }
+    const kind = KINDS.includes(item.kind) ? item.kind : 'image';
+    return {
+      url,
+      kind,
+      mimeType: item.mimeType ? String(item.mimeType).slice(0, 100) : null,
+      size: Number.isFinite(Number(item.size)) ? Number(item.size) : null,
+      storage: 'cloudinary',
+      publicId: item.publicId ? String(item.publicId).slice(0, 300) : null,
+      originalName: item.originalName ? String(item.originalName).slice(0, 260) : null,
+    };
+  });
+}
 
 /** Business rules for creating and reading violation reports. */
 class ReportService {
@@ -27,21 +79,35 @@ class ReportService {
       throw ApiError.badRequest('The violation date and time cannot be in the future.');
     }
 
-    // Upload media first; if anything fails, roll back what already went up.
+    // Two submission paths:
+    //  - multipart: files stream through this API (local, Docker, Render)
+    //  - JSON: the browser already uploaded to Cloudinary and sends URLs.
+    //    Required on platforms that cap request bodies, such as Vercel's 4.5MB.
     const uploaded = [];
     let voiceNote = null;
-    try {
-      const evidenceFiles = files.evidence || [];
-      for (const file of evidenceFiles) {
-        uploaded.push(await StorageService.upload(file, baseUrl));
+
+    const directEvidence = validateDirectMedia(body.evidence, { field: 'evidence' });
+    const directVoice = validateDirectMedia(body.voiceNote, { field: 'voiceNote' })[0] || null;
+
+    if (directEvidence.length || directVoice) {
+      uploaded.push(...directEvidence);
+      if (directVoice) voiceNote = { ...directVoice, kind: 'audio' };
+    } else {
+      try {
+        const evidenceFiles = files.evidence || [];
+        for (const file of evidenceFiles) {
+          uploaded.push(await StorageService.upload(file, baseUrl));
+        }
+        if (files.voiceNote && files.voiceNote[0]) {
+          voiceNote = await StorageService.upload(files.voiceNote[0], baseUrl);
+          voiceNote.kind = 'audio';
+        }
+      } catch (err) {
+        await Promise.all(
+          [...uploaded, voiceNote].filter(Boolean).map((m) => StorageService.remove(m))
+        );
+        throw new ApiError(502, `Uploading your evidence failed: ${err.message}`);
       }
-      if (files.voiceNote && files.voiceNote[0]) {
-        voiceNote = await StorageService.upload(files.voiceNote[0], baseUrl);
-        voiceNote.kind = 'audio';
-      }
-    } catch (err) {
-      await Promise.all([...uploaded, voiceNote].filter(Boolean).map((m) => StorageService.remove(m)));
-      throw new ApiError(502, `Uploading your evidence failed: ${err.message}`);
     }
 
     const primary = uploaded.find((m) => m.kind === 'image') || uploaded[0] || null;
