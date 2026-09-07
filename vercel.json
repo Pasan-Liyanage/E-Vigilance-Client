@@ -1,11 +1,16 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "installCommand": "npm --prefix server ci --omit=dev && npm --prefix web ci",
-  "buildCommand": "npm --prefix web run build",
+  "installCommand": "cd server && npm ci --omit=dev && cd ../web && npm ci",
+  "buildCommand": "cd web && npm run build",
   "outputDirectory": "web/dist",
   "framework": null,
-  "regions": ["sin1"],
+  "regions": [
+    "sin1"
+  ],
   "rewrites": [
-    { "source": "/((?!api/).*)", "destination": "/index.html" }
+    {
+      "source": "/((?!api/).*)",
+      "destination": "/index.html"
+    }
   ]
 }
