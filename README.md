@@ -1,5 +1,12 @@
 # E-Vigilance
 
+**Live:**
+- App (API + PWA, one origin) — <https://e-vigilance-client.vercel.app>
+- PWA mirror on GitHub Pages — <https://pasan-liyanage.github.io/E-Vigilance-Client/>
+
+Both are installable: open either on a phone and the *Install app* prompt adds it to your
+home screen / app list.
+
 A traffic-violation reporting system for citizens, built as an installable **PWA** with a
 **Node.js/Express + MongoDB** backend. It replaces the previous Flutter mobile app and shares
 the same MongoDB Atlas database as the existing admin dashboard, so every report filed here
@@ -319,7 +326,15 @@ calls are correct.
 a real app install (§4).
 
 Without the two `VITE_CLOUDINARY_*` values the app falls back to uploading through the API into
-GridFS, which works locally and in Docker but **will fail on Vercel** for anything over 4.5 MB.
+GridFS. Photos still work there, because the browser downscales them to well under the cap
+before upload (`web/src/utils/compressImage.js` — a 15 MB phone photo becomes ~0.3 MB). What
+does **not** work without Cloudinary on Vercel:
+
+- **Video evidence** — a clip cannot be shrunk client-side, so it exceeds the 4.5 MB request cap.
+- **Seeking within media served from GridFS** — Vercel does not return `206 Partial Content`
+  through a function, so `Range` requests fall back to a full response.
+
+Both disappear once the Cloudinary preset is set, because the media never touches the API.
 
 ### Option B — Render / any Docker host
 
@@ -439,6 +454,8 @@ them, so when checking layout, disable it first.
 | Install sheet never appears | Only shows on HTTPS/localhost, only once per 7 days after "Not now", never when already installed, and never during the report wizard. Clear `evigilance.install.dismissedAt` in localStorage to see it again. |
 | Phone offers "Add to Home screen" instead of "Install" | The origin is not trusted-secure. Plain HTTP *and* self-signed HTTPS both fail this test. Use Chrome port forwarding, a tunnel, or real TLS — see §3, and run `npm run check:install <url>` to confirm. |
 | Installed app still shows browser bars | The manifest was not picked up at install time. Uninstall, hard-reload, confirm DevTools → Application → Manifest shows `display: standalone`, then reinstall. |
+| Video upload fails on Vercel, photos are fine | Expected without Cloudinary: photos are downscaled client-side, video cannot be. Set the two `VITE_CLOUDINARY_*` variables — see §7 Option A. |
+| Sign-in returns 500 on a host where `CORS_ORIGINS` is set | Fixed — the API now always allows requests whose Origin host matches the request host. Rebuild if you are running an older copy. |
 | Uploads fail with `413 FUNCTION_PAYLOAD_TOO_LARGE` | You are on Vercel without direct uploads configured. Set the two `VITE_CLOUDINARY_*` variables and redeploy — see §7 Option A. |
 | Report rejected: "must be an https URL on the configured Cloudinary account" | `CLOUDINARY_CLOUD_NAME` on the server does not match the cloud the browser uploaded to. |
 | Pages site loads but every API call fails | `CORS_ORIGINS` on the API does not include `https://<user>.github.io`, or `VITE_API_URL` was not set at build time. |
