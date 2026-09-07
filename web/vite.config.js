@@ -22,7 +22,7 @@ export default defineConfig({
     ...(HTTPS ? [basicSsl()] : []),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon-64.png', 'apple-touch-icon.png'],
+      includeAssets: ['favicon.ico', 'favicon.svg', 'favicon-16.png', 'favicon-32.png', 'favicon-48.png', 'apple-touch-icon.png'],
       manifest: {
         // A stable id keeps this the *same* installed app across deploys.
         id: withBase('?source=pwa'),
@@ -64,7 +64,7 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,svg,woff2}', 'icon-*.png', 'favicon-*.png', 'apple-touch-icon.png'],
+        globPatterns: ['**/*.{js,css,html,svg,woff2,ico}', 'icon-*.png', 'favicon-*.png', 'apple-touch-icon.png'],
         navigateFallback: `${BASE}index.html`,
         navigateFallbackDenylist: [/^\/api\//],
         runtimeCaching: [
