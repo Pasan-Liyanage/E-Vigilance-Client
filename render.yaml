@@ -1,0 +1,48 @@
+# Render Blueprint - deploys the API *and* the PWA as one Docker service.
+#
+#   1. Push this repo to GitHub (done)
+#   2. https://dashboard.render.com/blueprints -> New Blueprint Instance
+#   3. Pick this repository, then paste your MONGO_URI when prompted
+#
+# Everything else is filled in automatically. The result is a single HTTPS URL
+# serving both the API and the installable PWA, which is all a demo needs.
+services:
+  - type: web
+    name: e-vigilance
+    runtime: docker
+    plan: free           # free instances sleep after 15 min idle; first hit takes ~50s
+    region: singapore    # closest free region to Sri Lanka
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_ENV
+        value: production
+
+      # Render injects its own PORT; server.js reads process.env.PORT.
+      - key: PORT
+        value: 10000
+
+      # Prompted on first deploy and stored by Render - never committed here.
+      - key: MONGO_URI
+        sync: false
+
+      # Generated once by Render, then kept stable across deploys.
+      - key: JWT_SECRET
+        generateValue: true
+
+      - key: JWT_EXPIRES_IN
+        value: 7d
+
+      # Allows the GitHub Pages frontend to call this API. Same-origin requests
+      # (the PWA this service serves itself) need no entry.
+      - key: CORS_ORIGINS
+        value: https://pasan-liyanage.github.io
+
+      # Media storage: GridFS needs nothing extra. To use Cloudinary instead,
+      # add the three CLOUDINARY_* keys in the Render dashboard.
+      - key: STORAGE_DRIVER
+        value: auto
+      - key: MAX_UPLOAD_MB
+        value: 50

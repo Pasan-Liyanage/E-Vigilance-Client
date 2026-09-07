@@ -5,6 +5,17 @@
 
 const BASE = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
 
+/**
+ * With no VITE_API_URL the app assumes the API is same-origin, which is true
+ * locally and in Docker. On a static host serving from a sub-path (GitHub
+ * Pages) there is no API to talk to, so say that plainly instead of letting
+ * every call fail as an unexplained 404.
+ */
+const API_CONFIGURED = Boolean(BASE) || import.meta.env.BASE_URL === '/';
+const NOT_CONFIGURED =
+  'This build has no backend configured. Set the VITE_API_URL repository ' +
+  'variable to your API URL and re-run the deploy workflow.';
+
 const TOKEN_KEY = 'evigilance.token';
 
 export const tokenStore = {
@@ -46,6 +57,8 @@ async function request(path, { method = 'GET', body, headers = {}, auth = true, 
     opts.body = JSON.stringify(body);
   }
 
+  if (!API_CONFIGURED) throw new ApiError(NOT_CONFIGURED, 0);
+
   let res;
   try {
     res = await fetch(`${BASE}${path}`, opts);
@@ -76,6 +89,8 @@ async function request(path, { method = 'GET', body, headers = {}, auth = true, 
  */
 function upload(path, formData, onProgress) {
   return new Promise((resolve, reject) => {
+    if (!API_CONFIGURED) return reject(new ApiError(NOT_CONFIGURED, 0));
+
     const xhr = new XMLHttpRequest();
     xhr.open('POST', `${BASE}${path}`);
 
@@ -102,6 +117,9 @@ function upload(path, formData, onProgress) {
     xhr.send(formData);
   });
 }
+
+/** False when the bundle was built without an API URL for a static host. */
+export const isApiConfigured = () => API_CONFIGURED;
 
 export const api = {
   register: (payload) => request('/api/auth/register', { method: 'POST', body: payload, auth: false }),

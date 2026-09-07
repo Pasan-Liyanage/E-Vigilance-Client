@@ -1,10 +1,15 @@
 # Publishes the PWA (web/) to GitHub Pages.
 #
 # Pages is static-only, so this deploys the FRONTEND ONLY. The Express API in
-# server/ must run somewhere that executes Node (Render, Railway, Fly.io, a VPS,
-# the Docker image in this repo...). Point the frontend at it by setting a
-# repository variable named VITE_API_URL, e.g. https://e-vigilance-api.onrender.com
+# server/ must run somewhere that executes Node - see render.yaml for a
+# one-click deploy, or run the Dockerfile anywhere.
+#
+# Point the frontend at that API with a repository variable named VITE_API_URL:
 #   Settings -> Secrets and variables -> Actions -> Variables -> New variable
+#   VITE_API_URL = https://your-api-host
+#
+# Without it the site still deploys (so you can see the UI), but sign-in and
+# reports will not work until the variable is set and the workflow re-run.
 name: Deploy PWA to GitHub Pages
 
 on:
@@ -20,7 +25,6 @@ permissions:
   pages: write
   id-token: write
 
-# Let a running deploy finish; queue at most one more.
 concurrency:
   group: pages
   cancel-in-progress: false
@@ -29,9 +33,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -41,13 +45,13 @@ jobs:
         working-directory: web
         run: npm ci
 
-      - name: Fail early if the API URL is not configured
+      - name: Check API configuration
         run: |
           if [ -z "${{ vars.VITE_API_URL }}" ]; then
-            echo "::error::VITE_API_URL repository variable is not set."
-            echo "The deployed PWA would have no backend to talk to."
-            echo "Set it under Settings -> Secrets and variables -> Actions -> Variables."
-            exit 1
+            echo "::warning title=No API configured::VITE_API_URL is not set, so the deployed PWA will have no backend. Deploy the API (see render.yaml), then set the VITE_API_URL repository variable and re-run this workflow."
+            echo "Deploying the UI anyway so the site is visible."
+          else
+            echo "API: ${{ vars.VITE_API_URL }}"
           fi
 
       - name: Build
@@ -58,8 +62,8 @@ jobs:
           VITE_API_URL: ${{ vars.VITE_API_URL }}
         run: npm run build
 
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: web/dist
 
@@ -71,4 +75,4 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
