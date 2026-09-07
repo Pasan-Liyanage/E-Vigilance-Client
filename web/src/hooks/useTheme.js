@@ -18,7 +18,7 @@ export function useTheme() {
     document.documentElement.setAttribute('data-theme', theme);
     try { localStorage.setItem(KEY, theme); } catch { /* private mode */ }
     const meta = document.querySelector('meta[name="theme-color"]:not([media])');
-    if (meta) meta.setAttribute('content', theme === 'dark' ? '#0b1020' : '#2540b2');
+    if (meta) meta.setAttribute('content', theme === 'dark' ? '#0b1020' : '#2b7bc0');
   }, [theme]);
 
   const toggle = useCallback(() => setTheme((t) => (t === 'dark' ? 'light' : 'dark')), []);

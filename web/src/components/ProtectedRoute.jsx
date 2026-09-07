@@ -1,6 +1,7 @@
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Shield } from './Icons';
+import Logo from './Logo';
+
 
 /** Blocks a route until the session has been restored/validated. */
 export default function ProtectedRoute({ children }) {
@@ -11,9 +12,7 @@ export default function ProtectedRoute({ children }) {
     return (
       <div style={{ minHeight: '100dvh', display: 'grid', placeItems: 'center' }}>
         <div className="stack gap-14" style={{ alignItems: 'center' }}>
-          <div className="brand-mark" style={{ width: 52, height: 52, borderRadius: 15 }}>
-            <Shield size={27} />
-          </div>
+          <Logo size={56} />
           <div className="spinner" style={{ color: 'var(--brand-600)' }} />
         </div>
       </div>

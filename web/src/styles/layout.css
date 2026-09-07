@@ -28,7 +28,7 @@
 .brand-mark {
   width: 34px; height: 34px; border-radius: 10px; flex: none;
   background: var(--gradient); display: grid; place-items: center; color: #fff;
-  box-shadow: 0 4px 12px rgba(37, 64, 178, 0.35);
+  box-shadow: 0 4px 12px rgba(31, 95, 160, 0.35);
 }
 
 .avatar {
@@ -50,7 +50,7 @@
 }
 .nav-link:hover { background: var(--surface-3); color: var(--text); text-decoration: none; }
 .nav-link.active { background: var(--brand-50); color: var(--brand-700); }
-[data-theme='dark'] .nav-link.active { background: rgba(97, 114, 238, 0.18); color: var(--brand-300); }
+[data-theme='dark'] .nav-link.active { background: rgba(87, 161, 217, 0.20); color: var(--brand-300); }
 
 /* ---------------------------- Mobile bottom nav -------------------------- */
 .tabbar {
@@ -85,7 +85,7 @@
   width: 52px; height: 52px; margin-top: -18px;
   border-radius: 50%;
   background: var(--gradient); color: #fff;
-  box-shadow: 0 8px 20px rgba(37, 64, 178, 0.45);
+  box-shadow: 0 8px 20px rgba(31, 95, 160, 0.45);
   border: 4px solid var(--bg-elevated);
 }
 
@@ -140,7 +140,7 @@
   background: var(--gradient);
   color: #fff;
   padding: 24px;
-  box-shadow: 0 14px 36px rgba(37, 64, 178, 0.34);
+  box-shadow: 0 14px 36px rgba(31, 95, 160, 0.34);
 }
 .hero-card::after {
   content: ''; position: absolute; width: 260px; height: 260px;
@@ -179,7 +179,7 @@
   display: grid; place-items: center;
   background: var(--brand-50); color: var(--brand-700);
 }
-[data-theme='dark'] .action-tile .ai { background: rgba(97, 114, 238, 0.18); color: var(--brand-300); }
+[data-theme='dark'] .action-tile .ai { background: rgba(87, 161, 217, 0.20); color: var(--brand-300); }
 
 /* ------------------------------ Report list ------------------------------ */
 .report-card {
@@ -283,7 +283,7 @@
 .step-dot.done .n { background: var(--green); color: #fff; }
 .step-dot.current {
   color: #fff; background: var(--gradient); border-color: transparent;
-  box-shadow: 0 4px 12px rgba(37, 64, 178, 0.3);
+  box-shadow: 0 4px 12px rgba(31, 95, 160, 0.32);
 }
 .step-dot.current .n { background: rgba(255, 255, 255, 0.25); color: #fff; }
 
@@ -309,7 +309,7 @@
   transition: all 0.18s var(--ease);
 }
 .capture-btn:hover { border-color: var(--brand-500); color: var(--brand-600); background: var(--brand-50); border-style: solid; }
-[data-theme='dark'] .capture-btn:hover { background: rgba(97, 114, 238, 0.12); color: var(--brand-300); }
+[data-theme='dark'] .capture-btn:hover { background: rgba(87, 161, 217, 0.14); color: var(--brand-300); }
 
 .media-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 @media (min-width: 620px) { .media-grid { grid-template-columns: repeat(5, 1fr); } }
@@ -375,7 +375,7 @@
   width: 54px; height: 54px; border-radius: 50%; flex: none;
   display: grid; place-items: center;
   background: var(--gradient); color: #fff;
-  box-shadow: 0 6px 16px rgba(37, 64, 178, 0.35);
+  box-shadow: 0 6px 16px rgba(31, 95, 160, 0.35);
   transition: transform 0.15s var(--ease);
 }
 .mic-btn:active { transform: scale(0.94); }
@@ -413,9 +413,9 @@ audio { width: 100%; height: 40px; }
 .option:hover { border-color: var(--border-strong); background: var(--surface-3); }
 .option.selected {
   border-color: var(--brand-600); background: var(--brand-50); color: var(--brand-800);
-  box-shadow: 0 4px 14px rgba(37, 64, 178, 0.14);
+  box-shadow: 0 4px 14px rgba(31, 95, 160, 0.14);
 }
-[data-theme='dark'] .option.selected { background: rgba(97, 114, 238, 0.16); color: var(--brand-200); }
+[data-theme='dark'] .option.selected { background: rgba(87, 161, 217, 0.18); color: var(--brand-200); }
 .option .check {
   width: 22px; height: 22px; border-radius: 50%; flex: none;
   border: 2px solid var(--border-strong);
@@ -442,7 +442,7 @@ audio { width: 100%; height: 40px; }
   background: var(--brand-50); border: 1px solid var(--brand-200);
   color: var(--brand-800);
 }
-[data-theme='dark'] .install-bar { background: rgba(97, 114, 238, 0.14); border-color: rgba(97, 114, 238, 0.3); color: var(--brand-200); }
+[data-theme='dark'] .install-bar { background: rgba(87, 161, 217, 0.16); border-color: rgba(87, 161, 217, 0.32); color: var(--brand-200); }
 
 /* Evidence whose file is gone (deleted, or its host unreachable). */
 .media-missing {

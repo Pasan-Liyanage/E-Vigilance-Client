@@ -1,7 +1,8 @@
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useOnline } from '../hooks/useOnline';
-import { Shield, Home, FileText, Plus, User, Sun, Moon, WifiOff, LogOut } from './Icons';
+import { Home, FileText, Plus, User, Sun, Moon, WifiOff, LogOut } from './Icons';
+import Logo from './Logo';
 
 const initials = (name = '') =>
   name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || 'U';
@@ -29,7 +30,7 @@ export default function AppShell({ children, theme, onToggleTheme }) {
       <header className="topbar">
         <div className="container topbar-inner">
           <Link to="/dashboard" className="brand">
-            <span className="brand-mark"><Shield size={19} /></span>
+            <Logo size={34} />
             <span>E-Vigilance</span>
           </Link>
 

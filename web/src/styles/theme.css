@@ -3,21 +3,25 @@
    ========================================================================== */
 
 :root {
-  /* Brand */
-  --brand-50:  #eef2ff;
-  --brand-100: #e0e7ff;
-  --brand-200: #c7d2fe;
-  --brand-300: #a5b4fc;
-  --brand-400: #818cf8;
-  --brand-500: #4f5fe0;
-  --brand-600: #2540b2;
-  --brand-700: #1e3596;
-  --brand-800: #1b2c78;
-  --brand-900: #16225c;
+  /* Brand - taken from the logo's eye and shield blues */
+  --brand-50:  #eaf3fb;
+  --brand-100: #d3e6f6;
+  --brand-200: #aed2ee;
+  --brand-300: #82bae4;
+  --brand-400: #57a1d9;
+  --brand-500: #3585c6;
+  --brand-600: #2b7bc0;
+  --brand-700: #1f5fa0;
+  --brand-800: #1a4d84;
+  --brand-900: #143c68;
+
+  /* Accent - the logo's orange, used for in-progress states */
+  --accent-500: #dd7a28;
+  --accent-600: #c4661d;
 
   /* Status */
-  --amber:  #b45309;
-  --amber-bg: #fef3c7;
+  --amber:  #b8601a;
+  --amber-bg: #fdeedd;
   --green:  #047857;
   --green-bg: #d1fae5;
   --red:    #b91c1c;
@@ -44,12 +48,12 @@
   --border-strong: #cbd5e1;
 
   /* Effects */
-  --ring: 0 0 0 3px rgba(79, 95, 224, 0.28);
+  --ring: 0 0 0 3px rgba(53, 133, 198, 0.30);
   --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.06);
   --shadow-sm: 0 2px 8px rgba(15, 23, 42, 0.07);
   --shadow-md: 0 8px 24px rgba(15, 23, 42, 0.09);
   --shadow-lg: 0 18px 46px rgba(15, 23, 42, 0.14);
-  --gradient: linear-gradient(135deg, var(--brand-600) 0%, #4f46e5 55%, #4f80e5 100%);
+  --gradient: linear-gradient(135deg, #1f5fa0 0%, #2b7bc0 52%, #4b9ad8 100%);
 
   /* Shape */
   --r-sm: 10px;
@@ -85,10 +89,10 @@
   --border:        #26314e;
   --border-strong: #35436a;
 
-  --brand-600: #6172ee;
-  --brand-700: #4f5fe0;
+  --brand-600: #57a1d9;
+  --brand-700: #3585c6;
 
-  --amber:  #fcd34d;  --amber-bg: rgba(180, 83, 9, 0.22);
+  --amber:  #f0a45f;  --amber-bg: rgba(184, 96, 26, 0.24);
   --green:  #6ee7b7;  --green-bg: rgba(4, 120, 87, 0.22);
   --red:    #fca5a5;  --red-bg:   rgba(185, 28, 28, 0.24);
   --sky:    #7dd3fc;  --sky-bg:   rgba(3, 105, 161, 0.24);
@@ -97,8 +101,8 @@
   --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.45);
   --shadow-md: 0 10px 28px rgba(0, 0, 0, 0.5);
   --shadow-lg: 0 22px 54px rgba(0, 0, 0, 0.6);
-  --gradient: linear-gradient(135deg, #3b4bd8 0%, #5b4de0 55%, #4f80e5 100%);
-  --ring: 0 0 0 3px rgba(97, 114, 238, 0.4);
+  --gradient: linear-gradient(135deg, #1a4d84 0%, #2b7bc0 52%, #4fa0dc 100%);
+  --ring: 0 0 0 3px rgba(87, 161, 217, 0.42);
 
   color-scheme: dark;
 }

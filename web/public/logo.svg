@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1070 686" role="img" aria-label="E-Vigilance">
+  <title>E-Vigilance</title>
+  <defs>
+    <!-- Eye band: blue sweeping from the left tip, orange at the lower right. -->
+    <linearGradient id="ev-blue" x1="0" y1="0" x2="1" y2="0.8">
+      <stop offset="0"    stop-color="#2a5fa5"/>
+      <stop offset="0.28" stop-color="#3585c6"/>
+      <stop offset="0.72" stop-color="#5aa4da"/>
+      <stop offset="1"    stop-color="#8cc4e8"/>
+    </linearGradient>
+    <linearGradient id="ev-orange" x1="0.2" y1="1" x2="1" y2="0.1">
+      <stop offset="0"    stop-color="#b9571a"/>
+      <stop offset="0.45" stop-color="#dd7a28"/>
+      <stop offset="1"    stop-color="#ef9440"/>
+    </linearGradient>
+
+    <!-- Iris -->
+    <linearGradient id="ev-iris" x1="0" y1="0" x2="0.3" y2="1">
+      <stop offset="0"    stop-color="#ea8a33"/>
+      <stop offset="0.55" stop-color="#dd7a28"/>
+      <stop offset="1"    stop-color="#c4661d"/>
+    </linearGradient>
+    <!-- Where the eye band passes behind the iris it darkens. -->
+    <linearGradient id="ev-overlap" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0"    stop-color="#152e4a"/>
+      <stop offset="0.44" stop-color="#1b3b5d"/>
+      <stop offset="0.56" stop-color="#6d3315"/>
+      <stop offset="1"    stop-color="#89441c"/>
+    </linearGradient>
+    <linearGradient id="ev-shield" x1="0" y1="0" x2="0.4" y2="1">
+      <stop offset="0"   stop-color="#5da0d4"/>
+      <stop offset="1"   stop-color="#3b84c4"/>
+    </linearGradient>
+
+    <!-- The almond band: outer lens minus inner lens. -->
+    <path id="ev-band"
+      d="M72 347 Q538 -191 1005 347 Q538 933 72 347 Z
+         M162 347 Q538 3 916 347 Q538 743 162 347 Z"/>
+    <clipPath id="ev-lower-right">
+      <polygon points="450,700 1090,250 1090,700"/>
+    </clipPath>
+    <clipPath id="ev-iris-clip">
+      <circle cx="538" cy="352" r="210"/>
+    </clipPath>
+  </defs>
+
+  <!-- 1. eye band -->
+  <use href="#ev-band" fill="url(#ev-blue)" fill-rule="evenodd"/>
+  <use href="#ev-band" fill="url(#ev-orange)" fill-rule="evenodd" clip-path="url(#ev-lower-right)"/>
+
+  <!-- 2. iris, then the band redrawn darker where the two overlap -->
+  <circle cx="538" cy="352" r="210" fill="url(#ev-iris)"/>
+  <use href="#ev-band" fill="url(#ev-overlap)" fill-rule="evenodd" clip-path="url(#ev-iris-clip)"/>
+
+  <!-- 3. shield -->
+  <path d="M538 196 L666 241 L666 392 Q666 496 538 556 Q410 496 410 392 L410 241 Z" fill="#ffffff"/>
+  <path d="M538 232 L634 266 L634 392 Q634 470 538 521 Q442 470 442 392 L442 266 Z" fill="url(#ev-shield)"/>
+
+  <!-- 4. arrow -->
+  <g fill="none" stroke="#ffffff" stroke-width="30" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M538 492 V 336"/>
+    <path d="M476 394 L538 332 L600 394"/>
+  </g>
+</svg>

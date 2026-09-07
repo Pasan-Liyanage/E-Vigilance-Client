@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
-import { Shield, Camera, MapPin, FileText, ChevronRight } from '../components/Icons';
+import { Camera, MapPin, FileText, ChevronRight } from '../components/Icons';
+import Logo, { LogoPlate } from '../components/Logo';
 
 const FEATURES = [
   { icon: Camera, title: 'Capture real evidence', text: 'Photos, video and a voice note, straight from your phone.' },
@@ -13,9 +14,7 @@ export default function Welcome() {
     <div className="auth-wrap">
       <aside className="auth-aside">
         <div className="row gap-10">
-          <span className="brand-mark" style={{ background: 'rgba(255,255,255,.18)', boxShadow: 'none' }}>
-            <Shield size={19} />
-          </span>
+          <LogoPlate size={44} />
           <span style={{ fontWeight: 750, fontSize: '1.06rem', letterSpacing: '-0.03em' }}>E-Vigilance</span>
         </div>
 
@@ -49,9 +48,7 @@ export default function Welcome() {
       <main className="auth-main">
         <div className="auth-card stack gap-24">
           <div className="stack gap-14" style={{ alignItems: 'center', textAlign: 'center' }}>
-            <span className="brand-mark" style={{ width: 62, height: 62, borderRadius: 18 }}>
-              <Shield size={31} />
-            </span>
+            <Logo size={64} />
             <div>
               <h1>Welcome to E-Vigilance</h1>
               <p className="muted mt-8">

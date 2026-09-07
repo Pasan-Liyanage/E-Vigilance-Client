@@ -3,7 +3,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { Field } from '../components/ui';
-import { Shield, Mail, Lock, User, IdCard, Phone, Eye, EyeOff, ChevronRight, Check } from '../components/Icons';
+import { Mail, Lock, User, IdCard, Phone, Eye, EyeOff, ChevronRight, Check } from '../components/Icons';
+import Logo, { LogoPlate } from '../components/Logo';
 
 /** Sri Lankan NIC: 9 digits + V/X, or the 12-digit form. */
 const NIC_RE = /^(\d{9}[VvXx]|\d{12})$/;
@@ -89,9 +90,7 @@ export default function Signup() {
     <div className="auth-wrap">
       <aside className="auth-aside">
         <div className="row gap-10">
-          <span className="brand-mark" style={{ background: 'rgba(255,255,255,.18)', boxShadow: 'none' }}>
-            <Shield size={19} />
-          </span>
+          <LogoPlate size={44} />
           <span style={{ fontWeight: 750, fontSize: '1.06rem', letterSpacing: '-0.03em' }}>E-Vigilance</span>
         </div>
         <div>
@@ -115,9 +114,7 @@ export default function Signup() {
       <main className="auth-main">
         <form className="auth-card stack gap-20" onSubmit={submit} noValidate>
           <div className="stack gap-8">
-            <span className="brand-mark only-mobile" style={{ width: 52, height: 52, borderRadius: 16 }}>
-              <Shield size={26} />
-            </span>
+            <Logo size={52} className="only-mobile" />
             <h1 className="mt-8">Create your account</h1>
             <p className="muted">It takes less than a minute.</p>
           </div>

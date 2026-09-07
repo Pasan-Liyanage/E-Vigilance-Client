@@ -30,7 +30,7 @@ export default defineConfig({
         short_name: 'E-Vigilance',
         description:
           'Report traffic violations with photo, video and voice evidence, and follow your case status.',
-        theme_color: '#2540b2',
+        theme_color: '#2b7bc0',
         background_color: '#0b1020',
         display: 'standalone',
         // Chrome installs a real app (WebAPK) rather than a bookmark shortcut

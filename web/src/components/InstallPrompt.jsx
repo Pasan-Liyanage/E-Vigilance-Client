@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useInstallPrompt } from '../hooks/useInstallPrompt';
-import { Shield, Download, X, Share, AddSquare, Bolt, Camera, WifiOff, Check } from './Icons';
+import { Download, X, Share, AddSquare, Bolt, Camera, WifiOff, Check } from './Icons';
+import Logo from './Logo';
 
 const DISMISS_KEY = 'evigilance.install.dismissedAt';
 const SNOOZE_DAYS = 7;
@@ -105,7 +106,7 @@ export default function InstallPrompt() {
         ) : (
           <>
             <div className="row gap-14">
-              <span className="install-icon"><Shield size={26} /></span>
+              <span className="install-icon"><Logo size={30} /></span>
               <div className="grow">
                 <h3 id="install-title">Install E-Vigilance</h3>
                 <p className="muted small mt-4">
