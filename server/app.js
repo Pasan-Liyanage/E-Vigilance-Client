@@ -10,10 +10,11 @@ const express = require('express');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 
-const { isCloudinaryConfigured } = require('./src/config/cloudinary');
+const StorageService = require('./src/services/storageService');
 const authRoutes = require('./src/routes/authRoutes');
 const reportRoutes = require('./src/routes/reportRoutes');
 const mediaRoutes = require('./src/routes/mediaRoutes');
+const uploadRoutes = require('./src/routes/uploadRoutes');
 
 const app = express();
 
@@ -64,7 +65,7 @@ app.use(
 
 /* -------------------------------- Parsers -------------------------------- */
 // 2mb covers JSON report submissions, where media is already uploaded and the
-// body carries only URLs. Binary uploads go through multer, not here.
+// body carries only object keys. Binary uploads go through multer, not here.
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 
@@ -89,17 +90,19 @@ const apiInfo = (req, res) => {
     name: 'E-Vigilance API',
     version: '1.0.0',
     status: 'running',
-    mediaStorage: isCloudinaryConfigured ? 'cloudinary' : 'gridfs',
-    directUpload: Boolean(process.env.CLOUDINARY_CLOUD_NAME),
+    mediaStorage: StorageService.driver,
+    directUpload: StorageService.directUploadEnabled,
     endpoints: {
       'POST /api/auth/register': 'Create a citizen account',
       'POST /api/auth/login': 'Sign in',
       'GET  /api/auth/me': 'Current user (Bearer token)',
       'PATCH /api/auth/me': 'Update profile',
+      'POST /api/uploads': 'Signed URL for uploading one file straight to R2',
       'POST /api/reports': 'Submit a violation report (multipart or JSON)',
       'GET  /api/reports': "List the user's reports",
       'GET  /api/reports/stats': 'Dashboard counters',
       'GET  /api/reports/:id': 'One report',
+      'GET  /api/media/r2/:key': 'Redirect to a signed R2 evidence URL',
       'GET  /api/media/:id': 'Stream GridFS evidence',
     },
   });
@@ -111,6 +114,7 @@ app.get('/api/health', (req, res) => res.json({ ok: true, uptime: process.uptime
 app.use('/api/auth', authRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/media', mediaRoutes);
+app.use('/api/uploads', uploadRoutes);
 
 /* ------------------- Serve the built PWA (production) --------------------
  * When web/dist exists the API and the PWA are served from one origin, so no

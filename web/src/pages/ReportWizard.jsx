@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
-import { isDirectUploadEnabled, uploadToCloudinary } from '../api/cloudinary';
+import { DirectUploadUnavailable, isDirectUploadAvailable, uploadDirect } from '../api/directUpload';
 import { compressImage } from '../utils/compressImage';
 import { ensureFileType } from '../utils/fileType';
 import { useToast } from '../context/ToastContext';
@@ -215,11 +215,11 @@ export default function ReportWizard() {
     };
 
     try {
-      let res;
+      let res = null;
 
-      if (isDirectUploadEnabled() && (media.length || voiceNote)) {
-        // Media goes straight to Cloudinary, so serverless body caps never
-        // apply. Progress is the combined byte count across every file.
+      if (isDirectUploadAvailable() && (media.length || voiceNote)) {
+        // Media goes straight to R2, so serverless body caps never apply.
+        // Progress is the combined byte count across every file.
         const totalBytes =
           media.reduce((n, m) => n + m.file.size, 0) + (voiceNote ? voiceNote.size : 0);
         const loaded = new Map();
@@ -229,17 +229,30 @@ export default function ReportWizard() {
           setProgress(totalBytes ? Math.min(99, Math.round((sum / totalBytes) * 100)) : 0);
         };
 
-        const evidence = [];
-        for (const m of media) {
-          evidence.push(await uploadToCloudinary(m.file, (b) => bump(m.id, b)));
+        let uploads = null;
+        try {
+          const evidence = [];
+          for (const m of media) {
+            evidence.push(await uploadDirect(m.file, m.kind, (b) => bump(m.id, b)));
+          }
+          const voice = voiceNote
+            ? await uploadDirect(voiceNote, 'audio', (b) => bump('voice', b))
+            : null;
+          uploads = { evidence, voiceNote: voice };
+        } catch (err) {
+          if (!(err instanceof DirectUploadUnavailable)) throw err;
+          // Fall through to uploading via the API below.
+          console.warn('[upload] direct upload unavailable, sending through the API:', err.message);
+          setProgress(0);
         }
-        const voice = voiceNote
-          ? await uploadToCloudinary(voiceNote, (b) => bump('voice', b))
-          : null;
 
-        setProgress(100);
-        res = await api.createReportJson({ ...fields, evidence, voiceNote: voice });
-      } else {
+        if (uploads) {
+          setProgress(100);
+          res = await api.createReportJson({ ...fields, ...uploads });
+        }
+      }
+
+      if (!res) {
         const fd = new FormData();
         media.forEach((m) => {
           const f = ensureFileType(m.file, m.kind);

@@ -46,10 +46,36 @@ class ReportController {
     }
   };
 
+  /** POST /api/uploads - a signed URL for uploading one file straight to R2. */
+  presignUpload = async (req, res, next) => {
+    try {
+      const { name, type, size, kind } = req.body || {};
+      res.json(await StorageService.presignUpload({ name, type, size, kind }));
+    } catch (err) {
+      next(err);
+    }
+  };
+
   /** GET /api/media/:id - streams a GridFS-stored evidence file. */
   streamMedia = async (req, res, next) => {
     try {
       await StorageService.stream(req.params.id, req, res);
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  /**
+   * GET /api/media/r2/<key> - the bucket is private, so redirect to a fresh
+   * signed URL. The browser then reads (and seeks) directly from R2, which
+   * keeps large videos off the serverless function.
+   */
+  redirectR2Media = async (req, res, next) => {
+    try {
+      const url = await StorageService.signedReadUrl(req.params[0]);
+      // Cache the redirect for less time than the signature stays valid.
+      res.setHeader('Cache-Control', 'private, max-age=1800');
+      res.redirect(302, url);
     } catch (err) {
       next(err);
     }

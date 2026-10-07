@@ -1,13 +1,33 @@
+const crypto = require('crypto');
 const mongoose = require('mongoose');
+const {
+  PutObjectCommand, GetObjectCommand, HeadObjectCommand, DeleteObjectCommand,
+} = require('@aws-sdk/client-s3');
+const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const { getBucket } = require('../config/database');
-const { cloudinary, isCloudinaryConfigured } = require('../config/cloudinary');
+const { r2, isR2Configured, bucket, prefix, FOLDERS } = require('../config/r2');
 const ApiError = require('../utils/ApiError');
-const { mimeFromName, extensionOf } = require('../utils/mediaTypes');
+const { EXTENSION_MIME, mimeFromName, extensionOf } = require('../utils/mediaTypes');
+
+const MAX_BYTES = Number(process.env.MAX_UPLOAD_MB || 50) * 1024 * 1024;
+
+/** How long a browser has to finish a direct upload once it is granted. */
+const UPLOAD_URL_TTL = 15 * 60;
+/** How long a signed read URL stays valid. Media links are re-signed per request. */
+const READ_URL_TTL = 60 * 60;
 
 /** Types that carry no real information about the file. */
 const VAGUE_TYPES = new Set([
   '', 'text/plain', 'application/octet-stream', 'binary/octet-stream', 'application/unknown',
 ]);
+
+const escapeRx = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** evidence/<images|videos|audios>/<file name> - the only keys we hand out or accept. */
+const KEY_PATTERN = new RegExp(
+  `^${escapeRx(prefix)}/(${Object.values(FOLDERS).join('|')})/([A-Za-z0-9][A-Za-z0-9._-]{0,200})$`
+);
+const KIND_BY_FOLDER = Object.fromEntries(Object.entries(FOLDERS).map(([k, f]) => [f, k]));
 
 /**
  * Some browsers omit a part's Content-Type, which arrives as text/plain.
@@ -31,32 +51,36 @@ function normaliseMime(mimetype, filename, expectedKind) {
 }
 
 /**
- * Stores evidence media either in Cloudinary or in MongoDB GridFS.
+ * Stores evidence media either in Cloudflare R2 or in MongoDB GridFS.
  *
- * GridFS is the default so the system runs with nothing but the Mongo URI.
- * Adding the three CLOUDINARY_* keys switches uploads over automatically and
- * produces the same res.cloudinary.com URLs the older reports already use.
+ * R2 is used whenever its credentials are present. Files land in
+ * evidence/images, evidence/videos or evidence/audios, and the report keeps
+ * the object key and file name. GridFS remains as a zero-setup fallback for
+ * local development.
  */
 class StorageService {
-  /** Which driver uploads will use right now: 'cloudinary' or 'gridfs'. */
+  /** Which driver uploads will use right now: 'r2' or 'gridfs'. */
   get driver() {
     const configured = (process.env.STORAGE_DRIVER || 'auto').toLowerCase();
-    if (configured === 'cloudinary') {
-      if (!isCloudinaryConfigured) {
-        throw new Error(
-          'STORAGE_DRIVER=cloudinary but CLOUDINARY_* keys are missing in .env'
-        );
+    if (configured === 'r2') {
+      if (!isR2Configured) {
+        throw new Error('STORAGE_DRIVER=r2 but R2_* keys are missing in .env');
       }
-      return 'cloudinary';
+      return 'r2';
     }
     if (configured === 'gridfs') return 'gridfs';
-    return isCloudinaryConfigured ? 'cloudinary' : 'gridfs';
+    return isR2Configured ? 'r2' : 'gridfs';
+  }
+
+  /** True when browsers may upload straight to the bucket. */
+  get directUploadEnabled() {
+    return this.driver === 'r2';
   }
 
   /**
    * Uploads one multer in-memory file.
    * @param {object} file   multer file ({ buffer, mimetype, originalname, size })
-   * @param {string} baseUrl absolute origin of this API, used to build GridFS URLs
+   * @param {string} baseUrl absolute origin of this API, used to build media URLs
    * @param {'image'|'video'|'audio'} [expectedKind] disambiguates containers
    *   such as .webm that can hold either audio or video
    * @returns {Promise<object>} a media sub-document
@@ -65,8 +89,8 @@ class StorageService {
     if (!file || !file.buffer) throw ApiError.badRequest('No file received.');
     file = { ...file, mimetype: normaliseMime(file.mimetype, file.originalname, expectedKind) };
     const kind = expectedKind || detectKind(file.mimetype, file.originalname);
-    return this.driver === 'cloudinary'
-      ? this.#toCloudinary(file, kind)
+    return this.driver === 'r2'
+      ? this.#toR2(file, kind, baseUrl)
       : this.#toGridFS(file, kind, baseUrl);
   }
 
@@ -76,25 +100,88 @@ class StorageService {
     return Promise.all(files.map((f) => this.upload(f, baseUrl)));
   }
 
-  async #toCloudinary(file, kind) {
-    const folder = process.env.CLOUDINARY_FOLDER || 'evigilance/violations';
-    const result = await new Promise((resolve, reject) => {
-      const stream = cloudinary.uploader.upload_stream(
-        { folder, resource_type: 'auto' },
-        (err, res) => (err ? reject(err) : resolve(res))
-      );
-      stream.end(file.buffer);
-    });
+  async #toR2(file, kind, baseUrl) {
+    const { key, fileName } = newObjectKey(kind, file.mimetype, file.originalname);
+    await r2.send(new PutObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      Body: file.buffer,
+      ContentType: file.mimetype,
+    }));
+    return r2Media({ key, fileName, kind, mimeType: file.mimetype, size: file.size,
+      originalName: file.originalname, baseUrl });
+  }
 
-    return {
-      url: result.secure_url,
-      kind,
-      mimeType: file.mimetype,
-      size: file.size,
-      storage: 'cloudinary',
-      publicId: result.public_id,
-      originalName: file.originalname || null,
-    };
+  /**
+   * Grants the browser a short-lived URL to PUT one file straight into R2,
+   * so media never passes through the API (Vercel caps bodies at 4.5 MB).
+   * The browser must send exactly the returned contentType.
+   */
+  async presignUpload({ name, type, size, kind }) {
+    if (!this.directUploadEnabled) {
+      throw new ApiError(501, 'Direct uploads are not enabled on this server.');
+    }
+    const expectedKind = Object.prototype.hasOwnProperty.call(FOLDERS, kind) ? kind : undefined;
+    const contentType = normaliseMime(type, name, expectedKind);
+    const bare = contentType.toLowerCase().split(';')[0].trim();
+    if (!/^(image|video|audio)\//.test(bare)) {
+      throw ApiError.badRequest(`"${name || 'file'}" is not a photo, video or audio file.`);
+    }
+    const bytes = Number(size);
+    if (Number.isFinite(bytes) && bytes > MAX_BYTES) {
+      throw ApiError.badRequest(`Each file must be ${MAX_BYTES / 1024 / 1024} MB or smaller.`);
+    }
+
+    const finalKind = expectedKind || detectKind(contentType, name);
+    const { key, fileName } = newObjectKey(finalKind, contentType, name);
+    const uploadUrl = await getSignedUrl(
+      r2,
+      new PutObjectCommand({ Bucket: bucket, Key: key, ContentType: contentType }),
+      { expiresIn: UPLOAD_URL_TTL }
+    );
+    return { key, fileName, kind: finalKind, contentType, uploadUrl, expiresIn: UPLOAD_URL_TTL };
+  }
+
+  /**
+   * Turns a key the browser reports as uploaded into a media sub-document,
+   * after checking with R2 that the object really exists and is in bounds.
+   */
+  async confirmUpload({ key, originalName }, baseUrl, field) {
+    const match = KEY_PATTERN.exec(String(key || ''));
+    if (!match) throw ApiError.badRequest(`${field} has an invalid file key.`);
+
+    let head;
+    try {
+      head = await r2.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
+    } catch (err) {
+      if (err?.$metadata?.httpStatusCode === 404) {
+        throw ApiError.badRequest(`${field} was not uploaded. Please attach it again.`);
+      }
+      throw err;
+    }
+    if (head.ContentLength > MAX_BYTES) {
+      await this.remove({ storage: 'r2', key });
+      throw ApiError.badRequest(`Each file must be ${MAX_BYTES / 1024 / 1024} MB or smaller.`);
+    }
+
+    return r2Media({
+      key,
+      fileName: match[2],
+      kind: KIND_BY_FOLDER[match[1]],
+      mimeType: head.ContentType || mimeFromName(key),
+      size: head.ContentLength ?? null,
+      originalName,
+      baseUrl,
+    });
+  }
+
+  /** A short-lived signed URL for reading one R2 object. */
+  async signedReadUrl(key) {
+    if (!isR2Configured) throw ApiError.notFound('Media not found.');
+    if (!KEY_PATTERN.test(String(key || ''))) throw ApiError.badRequest('Invalid media key.');
+    return getSignedUrl(r2, new GetObjectCommand({ Bucket: bucket, Key: key }), {
+      expiresIn: READ_URL_TTL,
+    });
   }
 
   #toGridFS(file, kind, baseUrl) {
@@ -116,6 +203,7 @@ class StorageService {
           size: file.size,
           storage: 'gridfs',
           publicId: id,
+          fileName: filename,
           originalName: file.originalname || null,
         });
       });
@@ -169,17 +257,44 @@ class StorageService {
   /** Removes a stored asset. Never throws - cleanup is best-effort. */
   async remove(media) {
     try {
-      if (!media || !media.publicId) return;
-      if (media.storage === 'cloudinary') {
-        const resourceType = media.kind === 'image' ? 'image' : 'video';
-        await cloudinary.uploader.destroy(media.publicId, { resource_type: resourceType });
-      } else if (mongoose.Types.ObjectId.isValid(media.publicId)) {
+      if (!media) return;
+      if (media.storage === 'r2' && media.key && isR2Configured) {
+        await r2.send(new DeleteObjectCommand({ Bucket: bucket, Key: media.key }));
+      } else if (media.storage === 'gridfs' && mongoose.Types.ObjectId.isValid(media.publicId)) {
         await getBucket().delete(new mongoose.Types.ObjectId(media.publicId));
       }
     } catch (err) {
       console.warn('[storage] cleanup failed:', err.message);
     }
   }
+}
+
+/** A fresh, unguessable object key such as evidence/images/1790758210571-66b92d1ca2a38a8f.jpg */
+function newObjectKey(kind, mimetype, originalName) {
+  const fileName = `${Date.now()}-${crypto.randomBytes(8).toString('hex')}.${extensionFor(mimetype, originalName)}`;
+  return { key: `${prefix}/${FOLDERS[kind] || FOLDERS.image}/${fileName}`, fileName };
+}
+
+/** Keeps a known media extension from the original name, else derives one from the type. */
+function extensionFor(mimetype, originalName) {
+  const ext = extensionOf(originalName);
+  if (Object.prototype.hasOwnProperty.call(EXTENSION_MIME, ext)) return ext;
+  const bare = String(mimetype || '').toLowerCase().split(';')[0].trim();
+  return Object.keys(EXTENSION_MIME).find((e) => EXTENSION_MIME[e] === bare) || 'bin';
+}
+
+function r2Media({ key, fileName, kind, mimeType, size, originalName, baseUrl }) {
+  return {
+    // Stable link to this API, which redirects to a fresh signed R2 URL.
+    url: `${trimSlash(baseUrl)}/api/media/r2/${key}`,
+    kind,
+    mimeType: mimeType || null,
+    size: size ?? null,
+    storage: 'r2',
+    key,
+    fileName,
+    originalName: originalName ? String(originalName).slice(0, 260) : null,
+  };
 }
 
 /** Maps a mimetype (with a filename fallback) onto image | video | audio. */

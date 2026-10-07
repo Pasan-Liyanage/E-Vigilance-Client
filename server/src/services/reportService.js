@@ -3,16 +3,15 @@ const StorageService = require('./storageService');
 const ApiError = require('../utils/ApiError');
 
 const REQUIRED = ['vehicleType', 'vehicleNumber', 'dateTime', 'issueType'];
-const KINDS = ['image', 'video', 'audio'];
 const MAX_DIRECT_ITEMS = 10;
 
 /**
- * Media the browser uploaded straight to Cloudinary arrives as URLs rather
- * than files. Never trust those blindly: only accept https URLs on the
- * configured Cloudinary account, so a caller cannot store a link to anything
- * else in a report.
+ * Media the browser uploaded straight to R2 arrives as object keys rather
+ * than files. Never trust those blindly: each key must match the layout we
+ * hand out, and R2 must confirm the object exists, so a caller cannot attach
+ * anything else to a report.
  */
-function validateDirectMedia(raw, { field }) {
+async function validateDirectMedia(raw, { field, baseUrl }) {
   if (raw === undefined || raw === null || raw === '') return [];
 
   let items = raw;
@@ -23,37 +22,18 @@ function validateDirectMedia(raw, { field }) {
   if (items.length > MAX_DIRECT_ITEMS) {
     throw ApiError.badRequest(`Attach at most ${MAX_DIRECT_ITEMS} photos or videos.`);
   }
+  if (!items.length) return [];
 
-  const cloud = process.env.CLOUDINARY_CLOUD_NAME;
-  if (!cloud) {
-    throw ApiError.badRequest(
-      'Direct uploads are not enabled on this server (CLOUDINARY_CLOUD_NAME is unset).'
-    );
+  if (!StorageService.directUploadEnabled) {
+    throw ApiError.badRequest('Direct uploads are not enabled on this server (R2 is not configured).');
   }
-  // https://res.cloudinary.com/<cloud>/... - the only shape we will store.
-  const allowed = new RegExp(`^https://res\\.cloudinary\\.com/${cloud.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/`);
 
-  return items.map((item, i) => {
+  return Promise.all(items.map((item, i) => {
     if (!item || typeof item !== 'object') {
       throw ApiError.badRequest(`${field}[${i}] is not an object.`);
     }
-    const url = String(item.url || '');
-    if (!allowed.test(url)) {
-      throw ApiError.badRequest(
-        `${field}[${i}] must be an https URL on the configured Cloudinary account.`
-      );
-    }
-    const kind = KINDS.includes(item.kind) ? item.kind : 'image';
-    return {
-      url,
-      kind,
-      mimeType: item.mimeType ? String(item.mimeType).slice(0, 100) : null,
-      size: Number.isFinite(Number(item.size)) ? Number(item.size) : null,
-      storage: 'cloudinary',
-      publicId: item.publicId ? String(item.publicId).slice(0, 300) : null,
-      originalName: item.originalName ? String(item.originalName).slice(0, 260) : null,
-    };
-  });
+    return StorageService.confirmUpload(item, baseUrl, `${field}[${i}]`);
+  }));
 }
 
 /** Business rules for creating and reading violation reports. */
@@ -63,7 +43,7 @@ class ReportService {
    * @param {string} userId
    * @param {object} body    the wizard fields
    * @param {object} files   { evidence: File[], voiceNote: File[] } from multer
-   * @param {string} baseUrl absolute origin, used for GridFS media URLs
+   * @param {string} baseUrl absolute origin, used to build media URLs
    */
   async createReport(userId, body, files = {}, baseUrl = '') {
     const missing = REQUIRED.filter((f) => !String(body[f] || '').trim());
@@ -80,18 +60,22 @@ class ReportService {
     }
 
     // Two submission paths:
-    //  - multipart: files stream through this API (local, Docker, Render)
-    //  - JSON: the browser already uploaded to Cloudinary and sends URLs.
+    //  - multipart: files stream through this API into storage
+    //  - JSON: the browser already uploaded to R2 and sends object keys.
     //    Required on platforms that cap request bodies, such as Vercel's 4.5MB.
     const uploaded = [];
     let voiceNote = null;
 
-    const directEvidence = validateDirectMedia(body.evidence, { field: 'evidence' });
-    const directVoice = validateDirectMedia(body.voiceNote, { field: 'voiceNote' })[0] || null;
+    const directEvidence = await validateDirectMedia(body.evidence, { field: 'evidence', baseUrl });
+    const directVoice =
+      (await validateDirectMedia(body.voiceNote, { field: 'voiceNote', baseUrl }))[0] || null;
+    if (directVoice && directVoice.kind !== 'audio') {
+      throw ApiError.badRequest('voiceNote must be an audio file.');
+    }
 
     if (directEvidence.length || directVoice) {
       uploaded.push(...directEvidence);
-      if (directVoice) voiceNote = { ...directVoice, kind: 'audio' };
+      voiceNote = directVoice;
     } else {
       try {
         const evidenceFiles = files.evidence || [];

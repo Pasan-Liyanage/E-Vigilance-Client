@@ -12,10 +12,24 @@ const cache = globalThis.__evigilanceMongo || (globalThis.__evigilanceMongo = {
   bucket: null,
 });
 
+const FALLBACK_DB = 'evigilence';
+
+/**
+ * Which database to use: MONGO_DB_NAME when set, otherwise the one named in
+ * the URI path (".../evigilence?..."). A URI with no path would silently
+ * land in "test", so that case falls back to a named database instead.
+ */
+function databaseName(uri) {
+  if (process.env.MONGO_DB_NAME) return process.env.MONGO_DB_NAME;
+  const match = /^mongodb(?:\+srv)?:\/\/[^/]+\/([^/?]+)/.exec(uri);
+  return match ? decodeURIComponent(match[1]) : FALLBACK_DB;
+}
+
 function open(uri) {
   mongoose.set('strictQuery', true);
   return mongoose
     .connect(uri, {
+      dbName: databaseName(uri),
       serverSelectionTimeoutMS: 15000,
       maxPoolSize: 10,
       // Fail fast instead of queueing queries when the connection drops.

@@ -5,6 +5,7 @@ import AppShell from './components/AppShell';
 import ProtectedRoute from './components/ProtectedRoute';
 import InstallPrompt from './components/InstallPrompt';
 
+import Info from './pages/Info';
 import Welcome from './pages/Welcome';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
@@ -35,7 +36,9 @@ export default function App() {
     <>
       <InstallPrompt />
       <Routes>
-        <Route path="/" element={<PublicOnly><Welcome /></PublicOnly>} />
+        {/* The shared link lands here for everyone; "Try app" leads into the app. */}
+        <Route path="/" element={<Info />} />
+        <Route path="/welcome" element={<PublicOnly><Welcome /></PublicOnly>} />
         <Route path="/login" element={<PublicOnly><Login /></PublicOnly>} />
         <Route path="/signup" element={<PublicOnly><Signup /></PublicOnly>} />
 
@@ -45,7 +48,7 @@ export default function App() {
         <Route path="/report" element={shell(<ReportWizard />)} />
         <Route path="/profile" element={shell(<Profile theme={theme} onToggleTheme={toggle} />)} />
 
-          <Route path="*" element={<NotFound />} />
+        <Route path="*" element={<NotFound />} />
       </Routes>
     </>
   );

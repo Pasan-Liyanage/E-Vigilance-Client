@@ -1,7 +1,7 @@
 # E-Vigilance
 
 **Live:**
-- App (API + PWA, one origin) — <https://e-vigilance-client.vercel.app>
+- App (API + PWA, one origin) — <https://e-vigilance.vercel.app>
 - PWA mirror on GitHub Pages — <https://pasan-liyanage.github.io/E-Vigilance-Client/>
 
 Both are installable: open either on a phone and the *Install app* prompt adds it to your
@@ -52,6 +52,11 @@ npm start         # Express serves the API *and* the built PWA on http://localho
 When `web/dist` exists the server serves the PWA at `/` and the API under `/api`.
 Without a build, `/` returns the API description instead.
 
+The PWA's `/` is a public **info page** (English, Sinhala and Tamil; copy in
+`web/src/i18n/info.js`) explaining what E-Vigilance is for. Its *Try app* button opens
+`/welcome` (sign up / sign in), or the dashboard for someone already signed in. The installed
+app skips the info page and starts at `/welcome`.
+
 ---
 
 ## 2. Configuration
@@ -62,37 +67,55 @@ Everything lives in `server/.env` (copy from `server/.env.example`).
 |---|---|
 | `PORT` | API port (default `5050`) |
 | `MONGO_URI` | MongoDB Atlas connection string — **the same cluster the admin panel uses** |
+| `MONGO_DB_NAME` | Optional. The database normally comes from the `MONGO_URI` path (`…mongodb.net/evigilence?…`); set this to override it. A URI with no database name uses `evigilence`, never `test` |
 | `JWT_SECRET` | Long random string used to sign tokens |
 | `JWT_EXPIRES_IN` | Token lifetime (default `7d`) |
 | `CORS_ORIGINS` | Comma-separated browser origins allowed to call the API |
-| `STORAGE_DRIVER` | `auto` (default), `gridfs`, or `cloudinary` |
+| `STORAGE_DRIVER` | `auto` (default), `r2`, or `gridfs` |
 | `MAX_UPLOAD_MB` | Per-file upload limit (default `50`) |
-| `CLOUDINARY_CLOUD_NAME` | Required for direct browser uploads — the API only accepts media URLs on this account |
-| `CLOUDINARY_API_KEY` / `_SECRET` | Optional — only needed to upload *through* the API rather than from the browser |
-| `PUBLIC_BASE_URL` | Optional — absolute origin used when building GridFS media URLs |
+| `R2_ENDPOINT` | `https://<account-id>.r2.cloudflarestorage.com` |
+| `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` | An R2 API token with object read & write on the bucket |
+| `R2_BUCKET` / `R2_PREFIX` | Bucket (default `e-vigilance`) and top-level folder (default `evidence`) |
+| `PUBLIC_BASE_URL` | Optional — absolute origin used when building media URLs |
 
 The frontend needs no configuration for local work (Vite proxies `/api` to the server).
-If you host the PWA separately from the API, set `VITE_API_URL` in `web/.env`. To upload media
-straight from the browser (required on Vercel), also set `VITE_CLOUDINARY_CLOUD_NAME` and
-`VITE_CLOUDINARY_UPLOAD_PRESET` — see `web/.env.example`.
+If you host the PWA separately from the API, set `VITE_API_URL` in `web/.env`.
 
 ### Media storage
 
-Media works out of the box with **no extra accounts**: files are stored in **MongoDB GridFS**
-and streamed back from `GET /api/media/:id` (with HTTP Range support, so video and audio
-can be seeked).
+Evidence is stored in **Cloudflare R2**, one folder per kind:
 
-Your existing reports use Cloudinary (cloud `ds5ugvgez`). To send new uploads there instead,
-add the three keys to `server/.env` and restart:
-
-```env
-CLOUDINARY_CLOUD_NAME=ds5ugvgez
-CLOUDINARY_API_KEY=...
-CLOUDINARY_API_SECRET=...
+```
+e-vigilance/evidence/images/1790758210571-66b92d1ca2a38a8f.jpg
+e-vigilance/evidence/videos/…
+e-vigilance/evidence/audios/…
 ```
 
-`STORAGE_DRIVER=auto` switches to Cloudinary automatically once the keys are present. Nothing
-else changes — the API and the database records look identical either way.
+Each media entry in a report keeps the object `key` and its `fileName`, plus a stable `url` of
+the form `/api/media/r2/<key>`. The bucket is private, so that URL answers with a redirect to a
+short-lived signed R2 URL; the browser then reads (and seeks within) the file straight from R2.
+
+Uploads normally go **straight from the browser to R2**: the PWA asks `POST /api/uploads` for a
+signed PUT URL, uploads the file, then submits the report with only the object keys. The server
+checks every key against R2 before saving it. If direct upload is unavailable, the PWA falls
+back to sending the files through the API, which puts them in R2 itself.
+
+Direct upload needs a **CORS rule on the bucket** (Cloudflare dashboard → R2 → `e-vigilance` →
+*Settings → CORS policy*):
+
+```json
+[
+  {
+    "AllowedOrigins": ["https://e-vigilance.vercel.app", "http://localhost:5173"],
+    "AllowedMethods": ["PUT", "GET", "HEAD"],
+    "AllowedHeaders": ["content-type"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+
+With no `R2_*` keys at all, `STORAGE_DRIVER=auto` falls back to **MongoDB GridFS**, streamed
+from `GET /api/media/:id`, so local development works with nothing but a Mongo URI.
 
 ---
 
@@ -219,16 +242,20 @@ All authenticated routes need `Authorization: Bearer <token>`.
 | `POST` | `/api/auth/login` | – | JSON: `email, password` | Sign in → `{ token, user }` |
 | `GET` | `/api/auth/me` | ✓ | – | Current user (restores a session) |
 | `PATCH` | `/api/auth/me` | ✓ | JSON: `name?, phone?` | Update profile |
-| `POST` | `/api/reports` | ✓ | `multipart/form-data` | Create a report |
+| `POST` | `/api/uploads` | ✓ | JSON: `name, type, size, kind?` | Signed URL to PUT one file into R2 → `{ key, uploadUrl, contentType }` |
+| `POST` | `/api/reports` | ✓ | `multipart/form-data` or JSON | Create a report |
 | `GET` | `/api/reports` | ✓ | `?status=&search=&page=&limit=` | The user's reports |
 | `GET` | `/api/reports/stats` | ✓ | – | `{ total, completed, inProgress, rejected }` |
 | `GET` | `/api/reports/:id` | ✓ | – | One report (403 if not yours) |
+| `GET` | `/api/media/r2/:key` | – | – | Redirect to a signed R2 URL for that file |
 | `GET` | `/api/media/:id` | – | – | Stream GridFS media (supports `Range`) |
 | `GET` | `/api/health` | – | – | Liveness probe |
 
 **`POST /api/reports` fields** — files under `evidence` (repeatable, ≤10) and `voiceNote` (≤1);
 text fields `vehicleType*`, `vehicleNumber*`, `vehicleModel`, `dateTime*` (ISO), `issueType*`,
-`location`, `latitude`, `longitude`, `additionalDetails`. `*` = required.
+`location`, `latitude`, `longitude`, `additionalDetails`. `*` = required. As JSON, send the same
+text fields with `evidence: [{ key, originalName }]` and `voiceNote: { key, originalName }`
+using keys from `POST /api/uploads`.
 
 ---
 
@@ -277,7 +304,7 @@ Two ways to deploy:
 
 | Option | Where things run | When to pick it |
 |---|---|---|
-| **A. Vercel** (best free demo) | PWA + API on Vercel, media on Cloudinary | Free, no sleeping, fast cold starts, one origin |
+| **A. Vercel** (best free demo) | PWA + API on Vercel, media on Cloudflare R2 | Free, no sleeping, fast cold starts, one origin |
 | **B. Render / any Docker host** | The Docker image serves API **and** PWA on one origin | No size limits at all; free tier sleeps after 15 min |
 | **C. GitHub Pages + separate API** | PWA on Pages, API elsewhere | A `github.io` URL, but two things to configure |
 
@@ -295,15 +322,11 @@ origin, so there is no CORS to configure. One platform limit shapes the design:
 > the same cap.
 
 So on Vercel, media must not travel through the API at all. The browser uploads **directly to
-Cloudinary** and the API only ever stores the resulting URLs; playback comes from Cloudinary's
-CDN. `web/src/api/cloudinary.js` does the upload, and the server validates that every
-submitted URL is an `https://res.cloudinary.com/<your-cloud>/…` address so arbitrary links
-cannot be injected into a report.
+R2** with a signed URL and the API only ever stores object keys; playback is a redirect to a
+signed R2 URL (see §2 *Media storage*).
 
-**1. Create an unsigned Cloudinary upload preset.** Cloudinary dashboard → *Settings → Upload
-→ Upload presets → Add unsigned preset*. Note the preset name and your cloud name. Unsigned
-means no API secret is needed in the browser — restrict the preset there (allowed formats, max
-file size) rather than trusting the client.
+**1. Add the CORS rule to the R2 bucket** — the JSON in §2 *Media storage*, with your Vercel
+domain in `AllowedOrigins`.
 
 **2. Import the repo at [vercel.com/new](https://vercel.com/new).** `vercel.json` supplies the
 build and routing; leave the framework preset as *Other*.
@@ -311,12 +334,14 @@ build and routing; leave the framework preset as *Other*.
 **3. Set the environment variables** (Project → Settings → Environment Variables):
 
 ```env
-MONGO_URI=mongodb+srv://...            # the shared Atlas cluster
+MONGO_URI=mongodb+srv://.../evigilence?appName=Cluster0   # the shared Atlas cluster; the path names the database
 JWT_SECRET=<a long random string>
-CLOUDINARY_CLOUD_NAME=ds5ugvgez        # server-side: validates submitted URLs
-
-VITE_CLOUDINARY_CLOUD_NAME=ds5ugvgez   # build-time: browser uploads
-VITE_CLOUDINARY_UPLOAD_PRESET=<your unsigned preset name>
+STORAGE_DRIVER=r2
+R2_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com
+R2_ACCESS_KEY_ID=...
+R2_SECRET_ACCESS_KEY=...
+R2_BUCKET=e-vigilance
+R2_PREFIX=evidence
 ```
 
 Leave `VITE_API_URL` **unset** — the PWA and API share an origin here, so relative `/api/...`
@@ -325,21 +350,15 @@ calls are correct.
 **4. Deploy.** Everything lands on one HTTPS URL, which also means the install prompt performs
 a real app install (§4).
 
-Without the two `VITE_CLOUDINARY_*` values the app falls back to uploading through the API into
-GridFS. Photos still work there, because the browser downscales them to well under the cap
-before upload (`web/src/utils/compressImage.js` — a 15 MB phone photo becomes ~0.3 MB). What
-does **not** work without Cloudinary on Vercel:
-
-- **Video evidence** — a clip cannot be shrunk client-side, so it exceeds the 4.5 MB request cap.
-- **Seeking within media served from GridFS** — Vercel does not return `206 Partial Content`
-  through a function, so `Range` requests fall back to a full response.
-
-Both disappear once the Cloudinary preset is set, because the media never touches the API.
+Without the bucket CORS rule the browser cannot reach R2, and the app falls back to uploading
+through the API. Photos still work there, because the browser downscales them to well under the
+cap before upload (`web/src/utils/compressImage.js` — a 15 MB phone photo becomes ~0.3 MB), but
+**video evidence** exceeds the 4.5 MB request cap.
 
 ### Option B — Render / any Docker host
 
-Option B has no payload limits, so it needs no Cloudinary setup — media goes through the API
-into GridFS as normal.
+Option B has no payload limits, so media can go through the API as well as directly to R2.
+Set the same `R2_*` variables as Option A.
 
 ### Option C — PWA on GitHub Pages
 
@@ -361,7 +380,7 @@ MONGO_URI=...                                     # the shared Atlas cluster
 JWT_SECRET=...                                    # a long random string
 NODE_ENV=production
 CORS_ORIGINS=https://<user>.github.io             # the Pages origin, no trailing slash
-PUBLIC_BASE_URL=https://<your-api-host>           # so GridFS media URLs are absolute and public
+PUBLIC_BASE_URL=https://<your-api-host>           # so media URLs are absolute and public
 ```
 
 `CORS_ORIGINS` and `PUBLIC_BASE_URL` are the two people forget. Without the first the browser
@@ -449,16 +468,16 @@ them, so when checking layout, disable it first.
 | Camera/mic/GPS refuse on a phone | Not a secure context — use `npm run dev:web:https` or a tunnel (see §3). |
 | "Cannot reach the server" | The API is not running, or `PORT` / the Vite proxy target disagree. |
 | Sign-in says the account belongs to the admin dashboard | That email is an admin/staff record; use a citizen account. |
-| Media 404s from the admin panel | GridFS URLs point at this API — it must be reachable from wherever the panel runs, or switch to Cloudinary. |
+| Media 404s from the admin panel | Media URLs point at this API — it must be reachable from wherever the panel runs. |
 | Voice note shows `0:00` duration | A known `MediaRecorder` WebM quirk; playback still works. |
 | Install sheet never appears | Only shows on HTTPS/localhost, only once per 7 days after "Not now", never when already installed, and never during the report wizard. Clear `evigilance.install.dismissedAt` in localStorage to see it again. |
 | Phone offers "Add to Home screen" instead of "Install" | The origin is not trusted-secure. Plain HTTP *and* self-signed HTTPS both fail this test. Use Chrome port forwarding, a tunnel, or real TLS — see §3, and run `npm run check:install <url>` to confirm. |
 | Installed app still shows browser bars | The manifest was not picked up at install time. Uninstall, hard-reload, confirm DevTools → Application → Manifest shows `display: standalone`, then reinstall. |
-| Video upload fails on Vercel, photos are fine | Expected without Cloudinary: photos are downscaled client-side, video cannot be. Set the two `VITE_CLOUDINARY_*` variables — see §7 Option A. |
+| Video upload fails on Vercel, photos are fine | The R2 bucket has no CORS rule, so uploads fall back to the API and hit Vercel's 4.5 MB cap. Add the rule from §2 *Media storage*. |
 | Sign-in returns 500 on a host where `CORS_ORIGINS` is set | Fixed — the API now always allows requests whose Origin host matches the request host. Rebuild if you are running an older copy. |
-| Uploads fail with `413 FUNCTION_PAYLOAD_TOO_LARGE` | You are on Vercel without direct uploads configured. Set the two `VITE_CLOUDINARY_*` variables and redeploy — see §7 Option A. |
-| Report rejected: "must be an https URL on the configured Cloudinary account" | `CLOUDINARY_CLOUD_NAME` on the server does not match the cloud the browser uploaded to. |
+| Uploads fail with `413 FUNCTION_PAYLOAD_TOO_LARGE` | Same cause: direct upload to R2 is blocked. Add the bucket CORS rule from §2 *Media storage*. |
+| "Database unavailable. Please try again shortly." | The API cannot reach MongoDB. `vercel logs` shows the reason — `bad auth` means `MONGO_URI` has stale credentials. |
 | Pages site loads but every API call fails | `CORS_ORIGINS` on the API does not include `https://<user>.github.io`, or `VITE_API_URL` was not set at build time. |
 | Pages site is blank / assets 404 | Built without `BASE_PATH`. Use `npm run build:pages`, or let the workflow do it. |
-| Evidence images broken on the Pages site | `PUBLIC_BASE_URL` is unset on the API, so GridFS URLs still say `localhost`. |
+| Evidence images broken on the Pages site | `PUBLIC_BASE_URL` is unset on the API, so media URLs still say `localhost`. |
 | "Evidence unavailable" on a report | The media file is missing — deleted from storage, or the API host in the URL is unreachable from where you are viewing. The rest of the report still renders. |

@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Mic, Trash, Alert } from './Icons';
 
+// MP4/AAC first: it is the one format every browser can play back, including
+// iOS Safari. Recent Safari can also *record* WebM, but those files do not
+// reliably play in Safari's <audio>, so a note recorded on an iPhone could
+// not be listened to afterwards. WebM stays as the fallback for browsers
+// without an AAC encoder (Firefox).
 const AUDIO_MIMES = [
+  'audio/mp4;codecs=mp4a.40.2',
   'audio/webm;codecs=opus',
   'audio/webm',
   'audio/mp4',

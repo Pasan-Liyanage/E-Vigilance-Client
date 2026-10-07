@@ -13,10 +13,10 @@ export default function Welcome() {
   return (
     <div className="auth-wrap">
       <aside className="auth-aside">
-        <div className="row gap-10">
+        <Link to="/" className="row gap-10 auth-brand" aria-label="E-Vigilance home">
           <LogoPlate size={44} />
           <span style={{ fontWeight: 750, fontSize: '1.06rem', letterSpacing: '-0.03em' }}>E-Vigilance</span>
-        </div>
+        </Link>
 
         <div className="stack gap-24">
           <h1 style={{ fontSize: 'clamp(2rem, 3vw, 2.7rem)', color: '#fff' }}>
@@ -48,7 +48,9 @@ export default function Welcome() {
       <main className="auth-main">
         <div className="auth-card stack gap-24">
           <div className="stack gap-14" style={{ alignItems: 'center', textAlign: 'center' }}>
-            <Logo size={64} />
+            <Link to="/" className="auth-logo-link" style={{ alignSelf: 'center' }} aria-label="E-Vigilance home">
+              <Logo size={64} />
+            </Link>
             <div>
               <h1>Welcome to E-Vigilance</h1>
               <p className="muted mt-8">

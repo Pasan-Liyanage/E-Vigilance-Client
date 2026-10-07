@@ -40,8 +40,8 @@ services:
       - key: CORS_ORIGINS
         value: https://pasan-liyanage.github.io
 
-      # Media storage: GridFS needs nothing extra. To use Cloudinary instead,
-      # add the three CLOUDINARY_* keys in the Render dashboard.
+      # Media storage: GridFS needs nothing extra. To use Cloudflare R2 instead,
+      # add the R2_* keys (see server/.env.example) in the Render dashboard.
       - key: STORAGE_DRIVER
         value: auto
       - key: MAX_UPLOAD_MB

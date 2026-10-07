@@ -127,9 +127,11 @@ export const api = {
   me: () => request('/api/auth/me'),
   updateProfile: (payload) => request('/api/auth/me', { method: 'PATCH', body: payload }),
 
-  // Multipart: files stream through the API (local, Docker, Render).
+  // Multipart: files stream through the API into storage.
   createReport: (formData, onProgress) => upload('/api/reports', formData, onProgress),
-  // JSON: media was already uploaded to Cloudinary, so only URLs are sent.
+  // A signed URL for putting one file straight into R2.
+  presignUpload: (payload) => request('/api/uploads', { method: 'POST', body: payload }),
+  // JSON: media was already uploaded to R2, so only object keys are sent.
   createReportJson: (payload) => request('/api/reports', { method: 'POST', body: payload }),
   listReports: (params = {}) => {
     const qs = new URLSearchParams(

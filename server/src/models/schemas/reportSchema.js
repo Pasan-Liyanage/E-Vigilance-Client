@@ -7,7 +7,10 @@ const mediaSchema = new mongoose.Schema(
     kind: { type: String, enum: ['image', 'video', 'audio'], required: true },
     mimeType: { type: String, default: null },
     size: { type: Number, default: null },
-    storage: { type: String, enum: ['cloudinary', 'gridfs'], required: true },
+    storage: { type: String, enum: ['r2', 'gridfs', 'cloudinary'], required: true },
+    // R2: the object key (evidence/images/<fileName>) and the stored file name.
+    key: { type: String, default: null },
+    fileName: { type: String, default: null },
     publicId: { type: String, default: null },
     originalName: { type: String, default: null },
   },

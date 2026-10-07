@@ -4,7 +4,7 @@ import { api } from '../api/client';
 import { StatusBadge, InfoRow, Skeleton, EmptyState } from '../components/ui';
 import {
   ChevronLeft, Car, Calendar, MapPin, Alert, FileText, Mic, Image as ImageIcon,
-  Video, Play, Clock, CheckCircle, X, Refresh, Info,
+  Video, Play, Clock, CheckCircle, X, Refresh, Info, Download,
 } from '../components/Icons';
 
 const fmtFull = (d) =>
@@ -60,10 +60,14 @@ export default function ReportDetail() {
   // URLs that failed to load - the file was removed or the host is unreachable.
   const [brokenMedia, setBrokenMedia] = useState(() => new Set());
   const markBroken = (url) => setBrokenMedia((s) => new Set(s).add(url));
+  // MediaError code for the voice note. 3/4 mean the file arrived but this
+  // browser cannot decode it, which is different from it being missing.
+  const [voiceError, setVoiceError] = useState(0);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
+    setVoiceError(0);
     try {
       const { report: r } = await api.getReport(id);
       setReport(r);
@@ -190,12 +194,22 @@ export default function ReportDetail() {
                 <Mic size={17} className="subtle" />
                 <span className="section-title">Voice note</span>
               </div>
-              {brokenMedia.has(report.voiceNote.url) ? (
-                <span className="small subtle">This voice note is no longer stored on the server.</span>
+              {voiceError ? (
+                <div className="stack gap-8">
+                  <span className="small subtle">
+                    {voiceError === 3 || voiceError === 4
+                      ? "This recording's format can't be played in this browser."
+                      : 'This voice note could not be loaded.'}
+                  </span>
+                  <a className="btn btn-sm btn-outline" style={{ alignSelf: 'flex-start' }}
+                    href={report.voiceNote.url} target="_blank" rel="noreferrer" download>
+                    <Download size={16} /> Open recording
+                  </a>
+                </div>
               ) : (
                 <audio
                   controls src={report.voiceNote.url} preload="metadata"
-                  onError={() => markBroken(report.voiceNote.url)}
+                  onError={(e) => setVoiceError(e.currentTarget.error?.code || 2)}
                 />
               )}
             </div>

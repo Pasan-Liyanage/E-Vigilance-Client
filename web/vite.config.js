@@ -38,7 +38,9 @@ export default defineConfig({
         display_override: ['standalone', 'minimal-ui'],
         launch_handler: { client_mode: 'navigate-existing' },
         orientation: 'portrait',
-        start_url: BASE,
+        // The installed app opens on the sign-in screen (or the dashboard once
+        // signed in), not the public info page that the shared link shows.
+        start_url: withBase('welcome'),
         scope: BASE,
         lang: 'en',
         dir: 'ltr',
@@ -70,7 +72,11 @@ export default defineConfig({
         runtimeCaching: [
           {
             // Evidence media - cache first, it never changes once uploaded.
-            urlPattern: ({ url }) => url.pathname.startsWith('/api/media/'),
+            // R2 media is left to the browser: it is a redirect to a signed
+            // cross-origin URL, which would cache as an opaque response and
+            // break range requests (video seeking).
+            urlPattern: ({ url }) =>
+              url.pathname.startsWith('/api/media/') && !url.pathname.startsWith('/api/media/r2/'),
             handler: 'CacheFirst',
             options: {
               cacheName: 'evigilance-media',

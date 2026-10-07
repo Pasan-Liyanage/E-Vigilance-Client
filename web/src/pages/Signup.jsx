@@ -89,10 +89,10 @@ export default function Signup() {
   return (
     <div className="auth-wrap">
       <aside className="auth-aside">
-        <div className="row gap-10">
+        <Link to="/" className="row gap-10 auth-brand" aria-label="E-Vigilance home">
           <LogoPlate size={44} />
           <span style={{ fontWeight: 750, fontSize: '1.06rem', letterSpacing: '-0.03em' }}>E-Vigilance</span>
-        </div>
+        </Link>
         <div>
           <h1 style={{ fontSize: 'clamp(2rem, 3vw, 2.7rem)', color: '#fff' }}>
             Every report<br />makes a difference.
@@ -114,7 +114,9 @@ export default function Signup() {
       <main className="auth-main">
         <form className="auth-card stack gap-20" onSubmit={submit} noValidate>
           <div className="stack gap-8">
-            <Logo size={52} className="only-mobile" />
+            <Link to="/" className="auth-logo-link only-mobile" aria-label="E-Vigilance home">
+              <Logo size={52} />
+            </Link>
             <h1 className="mt-8">Create your account</h1>
             <p className="muted">It takes less than a minute.</p>
           </div>

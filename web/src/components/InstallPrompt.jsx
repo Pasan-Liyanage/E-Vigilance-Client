@@ -41,7 +41,8 @@ export default function InstallPrompt() {
   const [done, setDone] = useState(false);
 
   // Filing a report means capturing evidence in modals - never interrupt that.
-  const busyRoute = pathname.startsWith('/report') && pathname !== '/reports';
+  // The info page stays clear too, so the sheet never covers "Try app".
+  const busyRoute = pathname === '/' || (pathname.startsWith('/report') && pathname !== '/reports');
   const eligible = (canInstall || needsManualSteps) && !installed && !busyRoute;
 
   // Wait a beat so the sheet never interrupts the first paint.
