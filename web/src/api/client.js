@@ -108,6 +108,14 @@ function upload(path, formData, onProgress) {
       try { data = xhr.responseText ? JSON.parse(xhr.responseText) : {}; } catch { /* non-JSON */ }
       if (xhr.status >= 200 && xhr.status < 300) return resolve(data);
       if (xhr.status === 401) unauthorizedHandlers.forEach((fn) => fn());
+      // Serverless hosts reject large bodies before the API sees them, with
+      // no JSON message of their own.
+      if (xhr.status === 413) {
+        return reject(new ApiError(
+          'Your photos and videos are too large to send together. Remove a video or record a shorter one, then try again.',
+          413
+        ));
+      }
       reject(new ApiError(data.message || `Upload failed (${xhr.status})`, xhr.status));
     };
     xhr.onerror = () => reject(new ApiError('Network error while uploading. Please try again.', 0));

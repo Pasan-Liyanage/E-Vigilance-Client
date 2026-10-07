@@ -3,6 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import { DirectUploadUnavailable, isDirectUploadAvailable, uploadDirect } from '../api/directUpload';
 import { compressImage } from '../utils/compressImage';
+import {
+  compressVideo, shouldCompressVideo, canCompressVideo, VideoCompressionCancelled,
+} from '../utils/compressVideo';
 import { ensureFileType } from '../utils/fileType';
 import { useToast } from '../context/ToastContext';
 import { useOnline } from '../hooks/useOnline';
@@ -62,7 +65,10 @@ export default function ReportWizard() {
   const [media, setMedia] = useState([]);      // { id, file, url, kind }
   const [voiceNote, setVoiceNote] = useState(null);
   const [errors, setErrors] = useState({});
+  // false, true (working on photos), or { video: true, progress } while a video is optimised.
   const [preparing, setPreparing] = useState(false);
+  const optimiseAbort = useRef(null);
+  const cancelOptimise = useCallback(() => optimiseAbort.current?.abort(), []);
   const [submitting, setSubmitting] = useState(false);
   const [progress, setProgress] = useState(0);
   const [done, setDone] = useState(null);
@@ -109,11 +115,38 @@ export default function ReportWizard() {
         // Some Android pickers return a File with an empty type; give it one
         // before anything else looks at it.
         const original = ensureFileType(picked, picked.type?.startsWith('video/') ? 'video' : 'image');
-        // Large photos are downscaled here so they upload quickly and stay
-        // under the request-size cap of serverless hosts.
-        const file = await compressImage(original);
+        // Large photos are downscaled and large videos re-encoded here, so
+        // they upload quickly and fit under the per-file limit.
+        let file;
+        if (shouldCompressVideo(original)) {
+          optimiseAbort.current = new AbortController();
+          setPreparing({ video: true, progress: 0 });
+          try {
+            file = await compressVideo(original, {
+              onProgress: (p) => setPreparing({ video: true, progress: p }),
+              signal: optimiseAbort.current.signal,
+              maxBytes: MAX_FILE_MB * 1024 * 1024,
+            });
+          } catch (err) {
+            if (!(err instanceof VideoCompressionCancelled)) throw err;
+            toast.info(`"${picked.name}" was not added.`);
+            continue;
+          } finally {
+            optimiseAbort.current = null;
+            setPreparing(true);
+          }
+        } else {
+          file = await compressImage(original);
+        }
         if (file.size > MAX_FILE_MB * 1024 * 1024) {
-          toast.error(`"${picked.name}" is larger than ${MAX_FILE_MB} MB and was skipped.`);
+          const isVideo = file.type.startsWith('video/');
+          toast.error(
+            isVideo && canCompressVideo()
+              ? `"${picked.name}" is still over ${MAX_FILE_MB} MB after optimising. Please trim it to a shorter clip.`
+              : isVideo
+              ? `"${picked.name}" is larger than ${MAX_FILE_MB} MB. Please trim it to a shorter clip.`
+              : `"${picked.name}" is larger than ${MAX_FILE_MB} MB and was skipped.`
+          );
           continue;
         }
         accepted.push({
@@ -333,6 +366,7 @@ export default function ReportWizard() {
           <Current
             form={form} set={set} errors={errors}
             media={media} addFiles={addFiles} removeMedia={removeMedia} preparing={preparing}
+            onCancelOptimise={cancelOptimise}
             voiceNote={voiceNote} setVoiceNote={setVoiceNote}
             resolvedIssue={resolvedIssue} goTo={goTo} toast={toast}
           />
@@ -344,15 +378,16 @@ export default function ReportWizard() {
               <ChevronLeft size={18} /> Back
             </button>
           )}
+          {/* Files still being optimised are not in the report yet, so wait for them. */}
           {isLast ? (
-            <button className="btn btn-primary grow" onClick={submit} disabled={submitting || !online}>
+            <button className="btn btn-primary grow" onClick={submit} disabled={submitting || !online || Boolean(preparing)}>
               {submitting
                 ? <><span className="spinner" /> {progress > 0 && progress < 100 ? `Uploading ${progress}%` : 'Submitting…'}</>
                 : <><Send size={18} /> Submit report</>}
             </button>
           ) : (
-            <button className="btn btn-primary grow" onClick={next}>
-              Continue <ChevronRight size={18} />
+            <button className="btn btn-primary grow" onClick={next} disabled={Boolean(preparing)}>
+              {preparing ? <><span className="spinner" /> Preparing…</> : <>Continue <ChevronRight size={18} /></>}
             </button>
           )}
         </div>
@@ -393,7 +428,7 @@ export default function ReportWizard() {
 }
 
 /* ============================ Step 1 - Evidence =========================== */
-function StepEvidence({ media, addFiles, removeMedia, preparing }) {
+function StepEvidence({ media, addFiles, removeMedia, preparing, onCancelOptimise }) {
   const photoInput = useRef(null);
   const videoInput = useRef(null);
   const [camera, setCamera] = useState(null); // 'photo' | 'video' | null
@@ -431,7 +466,21 @@ function StepEvidence({ media, addFiles, removeMedia, preparing }) {
         onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }}
       />
 
-      {preparing && (
+      {preparing?.video ? (
+        <div className="stack gap-8" role="status">
+          <div className="between small muted">
+            <span className="row gap-10">
+              <span className="spinner" style={{ color: 'var(--brand-600)' }} /> Optimising video for upload…
+            </span>
+            <strong>{Math.round(preparing.progress * 100)}%</strong>
+          </div>
+          <div className="optimise-bar"><i style={{ width: `${Math.round(preparing.progress * 100)}%` }} /></div>
+          <div className="between gap-12">
+            <span className="tiny subtle">Large videos are made smaller so they upload faster. Please keep this screen open.</span>
+            <button type="button" className="btn btn-sm btn-ghost" onClick={onCancelOptimise}>Cancel</button>
+          </div>
+        </div>
+      ) : preparing && (
         <div className="row gap-10 small muted">
           <span className="spinner" style={{ color: 'var(--brand-600)' }} /> Preparing your files…
         </div>

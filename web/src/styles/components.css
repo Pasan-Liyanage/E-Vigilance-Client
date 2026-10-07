@@ -358,3 +358,7 @@
   background: #ffffff;
   box-shadow: 0 4px 14px rgba(15, 23, 42, 0.16);
 }
+
+/* Progress while a large video is re-encoded before upload. */
+.optimise-bar { height: 6px; border-radius: 99px; background: var(--surface-3); overflow: hidden; }
+.optimise-bar i { display: block; height: 100%; border-radius: inherit; background: var(--gradient); transition: width 0.25s ease; }

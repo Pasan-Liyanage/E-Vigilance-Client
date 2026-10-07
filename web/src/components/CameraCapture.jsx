@@ -129,7 +129,13 @@ export default function CameraCapture({ open, mode = 'photo', onCapture, onClose
     const mimeType = pickMime(VIDEO_MIMES);
     let recorder;
     try {
-      recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      // Cap the bitrate so a one-minute clip stays around 20 MB. Without this,
+      // phones record at 10+ Mbps and the file quickly outgrows the upload limit.
+      recorder = new MediaRecorder(stream, {
+        ...(mimeType ? { mimeType } : {}),
+        videoBitsPerSecond: 2_500_000,
+        audioBitsPerSecond: 128_000,
+      });
     } catch {
       setError('Video recording is not supported by this browser. Please use "Upload" instead.');
       return;

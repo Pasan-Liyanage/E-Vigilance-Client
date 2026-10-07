@@ -106,13 +106,29 @@ Direct upload needs a **CORS rule on the bucket** (Cloudflare dashboard â†’ R2 â
 ```json
 [
   {
-    "AllowedOrigins": ["https://e-vigilance.vercel.app", "http://localhost:5173"],
+    "AllowedOrigins": [
+      "https://e-vigilance.vercel.app",
+      "https://pasan-liyanage.github.io",
+      "http://localhost:5173"
+    ],
     "AllowedMethods": ["PUT", "GET", "HEAD"],
     "AllowedHeaders": ["content-type"],
     "MaxAgeSeconds": 3600
   }
 ]
 ```
+
+Without this rule the browser cannot reach R2 and every upload goes through the API instead,
+where Vercel caps the whole request at 4.5 MB, so any real video fails.
+
+**Large videos are shrunk on the phone first.** A video over 12 MB is re-encoded in the browser
+(`web/src/utils/compressVideo.js`, using the phone's hardware encoder through WebCodecs and
+[Mediabunny](https://mediabunny.dev)) to H.264 MP4. The bitrate is worked out from the clip's
+length so the result lands near 20 MB, and the resolution follows from it: 720p when there is
+room, lower for long clips. A 30-second clip is encoded at 720p and about 4 Mbps, roughly 15 MB.
+Encoders treat the bitrate as a guide, so if a result is still over `MAX_FILE_MB` a second,
+smaller pass is made. The person sees progress and can cancel. Browsers that cannot re-encode
+keep the original, and the in-app camera records at 2.5 Mbps so its clips start small.
 
 With no `R2_*` keys at all, `STORAGE_DRIVER=auto` falls back to **MongoDB GridFS**, streamed
 from `GET /api/media/:id`, so local development works with nothing but a Mongo URI.

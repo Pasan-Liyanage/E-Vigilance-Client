@@ -67,9 +67,17 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,woff2,ico}', 'icon-*.png', 'favicon-*.png', 'apple-touch-icon.png'],
+        // The video encoder library is only needed when a large video is
+        // attached, so it is cached on first use instead of on install.
+        globIgnores: ['**/mediabunny-*.js'],
         navigateFallback: `${BASE}index.html`,
         navigateFallbackDenylist: [/^\/api\//],
         runtimeCaching: [
+          {
+            urlPattern: ({ url }) => /\/assets\/mediabunny-[^/]+\.js$/.test(url.pathname),
+            handler: 'CacheFirst',
+            options: { cacheName: 'evigilance-libs', expiration: { maxEntries: 4 } },
+          },
           {
             // Evidence media - cache first, it never changes once uploaded.
             // R2 media is left to the browser: it is a redirect to a signed
@@ -116,5 +124,11 @@ export default defineConfig({
     host: true,
     proxy: { '/api': { target: API_TARGET, changeOrigin: true } },
   },
-  build: { outDir: 'dist', sourcemap: false, chunkSizeWarningLimit: 900 },
+  build: {
+    outDir: 'dist',
+    sourcemap: false,
+    chunkSizeWarningLimit: 900,
+    // A stable name lets the service worker leave this lazy chunk out of its precache.
+    rollupOptions: { output: { manualChunks: (id) => (id.includes('node_modules/mediabunny') ? 'mediabunny' : undefined) } },
+  },
 });
