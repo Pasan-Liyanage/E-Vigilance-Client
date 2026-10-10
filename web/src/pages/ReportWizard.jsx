@@ -15,8 +15,9 @@ import CameraCapture from '../components/CameraCapture';
 import VoiceRecorder from '../components/VoiceRecorder';
 import {
   Camera, Video, Image as ImageIcon, Mic, Car, Calendar, Alert, MapPin, FileText,
-  CheckCircle, ChevronLeft, ChevronRight, X, Check, Crosshair, Send, Info, Plus, Clock,
+  CheckCircle, ChevronLeft, ChevronRight, X, Check, Crosshair, Send, Info, Plus, Clock, Search,
 } from '../components/Icons';
+import { extractCoordinates, geocodeAddress } from '../utils/coordinates';
 
 const STEPS = [
   { key: 'evidence', label: 'Evidence', icon: Camera },
@@ -202,6 +203,13 @@ export default function ReportWizard() {
         e.customIssue = 'Describe the violation.';
       }
     }
+    if (index === 4) {
+      // The police are routed to the nearest station from these coordinates,
+      // so a typed address alone is not enough.
+      if (form.latitude == null || form.longitude == null) {
+        e.location = 'Pin the location: tap "Use my current location", or type the address and tap "Find on map".';
+      }
+    }
     setErrors(e);
     return Object.keys(e).length === 0;
   }, [form]);
@@ -226,7 +234,7 @@ export default function ReportWizard() {
 
   const submit = async () => {
     // Re-check every gated step before sending.
-    for (const i of [1, 2, 3]) {
+    for (const i of [1, 2, 3, 4]) {
       if (!validateStep(i)) { setStep(i); return; }
     }
     if (!online) { toast.error('You are offline. Reconnect to submit this report.'); return; }
@@ -713,9 +721,36 @@ function StepIssue({ form, set, errors }) {
 }
 
 /* ============================ Step 5 - Location =========================== */
-function StepLocation({ form, set, toast }) {
+function StepLocation({ form, set, errors, toast }) {
   const [locating, setLocating] = useState(false);
+  const [finding, setFinding] = useState(false);
   const [geoError, setGeoError] = useState('');
+
+  /** Pins the typed address: typed coordinates first, else an OpenStreetMap lookup. */
+  const findOnMap = async () => {
+    setGeoError('');
+    const typed = extractCoordinates(form.location);
+    if (typed) {
+      set(typed);
+      toast.success('Location pinned.');
+      return;
+    }
+
+    setFinding(true);
+    try {
+      const hit = await geocodeAddress(form.location);
+      if (hit) {
+        set({ latitude: hit.latitude, longitude: hit.longitude });
+        toast.success('Location pinned. Check the map is right.');
+      } else {
+        setGeoError("We couldn't find that place on the map. Add the road and town, or use your current location.");
+      }
+    } catch {
+      setGeoError("We couldn't look up that address right now. Try again, or use your current location.");
+    } finally {
+      setFinding(false);
+    }
+  };
 
   const useMyLocation = () => {
     setGeoError('');
@@ -818,6 +853,18 @@ function StepLocation({ form, set, toast }) {
           onChange={(e) => set({ location: e.target.value })}
         />
       </Field>
+
+      {!hasCoords && (
+        <button
+          className="btn btn-outline btn-block"
+          onClick={findOnMap}
+          disabled={finding || !form.location.trim()}
+        >
+          {finding ? <><span className="spinner" /> Finding on map…</> : <><Search size={17} /> Find on map</>}
+        </button>
+      )}
+
+      {errors?.location && !hasCoords && <span className="error-text">{errors.location}</span>}
     </div>
   );
 }

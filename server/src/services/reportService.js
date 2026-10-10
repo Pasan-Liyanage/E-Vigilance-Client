@@ -1,6 +1,7 @@
 const ReportModel = require('../models/reportModel');
 const StorageService = require('./storageService');
 const ApiError = require('../utils/ApiError');
+const { extractCoordinates } = require('../utils/coordinates');
 
 const REQUIRED = ['vehicleType', 'vehicleNumber', 'dateTime', 'issueType'];
 const MAX_DIRECT_ITEMS = 10;
@@ -95,6 +96,13 @@ class ReportService {
 
     const primary = uploaded.find((m) => m.kind === 'image') || uploaded[0] || null;
 
+    let latitude = numberOrNull(body.latitude);
+    let longitude = numberOrNull(body.longitude);
+    if (latitude == null || longitude == null) {
+      const typed = extractCoordinates(body.location);
+      if (typed) ({ latitude, longitude } = typed);
+    }
+
     const report = await ReportModel.createReport({
       userId,
       // Keeps the admin panel's existing single-image field populated.
@@ -107,8 +115,8 @@ class ReportService {
       dateTime: when,
       issueType: String(body.issueType).trim(),
       location: nullable(body.location),
-      latitude: numberOrNull(body.latitude),
-      longitude: numberOrNull(body.longitude),
+      latitude,
+      longitude,
       additionalDetails: nullable(body.additionalDetails),
       status: 'In Progress',
     });
