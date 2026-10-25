@@ -1,28 +1,61 @@
-export const VEHICLE_TYPES = [
-  'Car', 'Motorcycle', 'Three Wheeler', 'Van', 'Bus', 'Lorry / Truck',
-  'Cab', 'Bicycle', 'Other',
+/**
+ * The vehicle choices, each with the admin system's type (its offences.model.js
+ * VEHICLE_TYPES). The label is what reports store and the previous admin panel
+ * shows; the type is what offences are checked against.
+ */
+export const VEHICLES = [
+  { label: 'Car', type: 'car', noun: 'a car' },
+  { label: 'Motorcycle', type: 'motorcycle', noun: 'a motorcycle' },
+  { label: 'Three Wheeler', type: 'three_wheeler', noun: 'a three-wheeler' },
+  { label: 'Van / Jeep / Cab', type: 'van', noun: 'a van, jeep or cab' },
+  { label: 'Bus', type: 'bus', noun: 'a bus' },
+  { label: 'Lorry / Truck', type: 'lorry', noun: 'a lorry or truck' },
+  { label: 'Tractor', type: 'tractor', noun: 'a tractor' },
+  { label: 'Other', type: 'other', noun: 'this vehicle' },
 ];
+export const VEHICLE_TYPES = VEHICLES.map((v) => v.label);
+
+/** The vehicle as a sentence names it ("a three-wheeler"). */
+export const vehicleNoun = (label) => VEHICLES.find((v) => v.label === label)?.noun ?? 'this vehicle';
+
+/** Labels from earlier versions of the app, as saved in drafts. */
+const OLD_LABELS = { Van: 'Van / Jeep / Cab', Cab: 'Van / Jeep / Cab', Bicycle: 'Other' };
+export const currentVehicleLabel = (label) =>
+  VEHICLE_TYPES.includes(label) ? label : OLD_LABELS[label] || '';
+
+/** The admin system's vehicle type for a label, or null. */
+export const vehicleTypeOf = (label) => VEHICLES.find((v) => v.label === label)?.type ?? null;
 
 /**
- * Used only when the police have not published their list of offences yet
- * (GET /api/offences returns none). The report then carries this text and the
- * police match it to an offence themselves.
+ * Whether an offence can be committed with this vehicle: an offence with no
+ * vehicle types applies to all, and "Other" fits any offence. The app's
+ * server and the admin system apply the same rule.
  */
-export const ISSUE_TYPES = [
-  'Running a red light',
-  'Speeding',
-  'Driving Recklessly',
-  'Wrong side Driving',
-  'A vehicle was parked illegally',
-  'A driver disobeyed a traffic signal or road sign',
-  'Overtaking in a no-overtaking zone',
-  'Using a mobile phone while driving',
-  'Not wearing a seat belt or helmet',
-  'Driving without a valid licence or insurance',
-  'Drunk driving',
-  'Blocking an emergency vehicle',
-  'Noise or emission violation',
-  'Other',
+export const appliesToVehicle = (offence, type) =>
+  !type || type === 'other' || !offence.vehicleTypes?.length || offence.vehicleTypes.includes(type);
+
+/**
+ * Used only when the police's list of offences can't be loaded (none
+ * published yet, or the request failed). The report then carries this text
+ * and the police match it to an offence themselves. Like the published
+ * list, each entry says which vehicles it applies to (none = all).
+ */
+export const FALLBACK_ISSUES = [
+  { name: 'Running a red light' },
+  { name: 'Speeding' },
+  { name: 'Driving Recklessly' },
+  { name: 'Wrong side Driving' },
+  { name: 'A vehicle was parked illegally' },
+  { name: 'A driver disobeyed a traffic signal or road sign' },
+  { name: 'Overtaking in a no-overtaking zone' },
+  { name: 'Using a mobile phone while driving' },
+  { name: 'Not wearing a helmet', vehicleTypes: ['motorcycle'] },
+  { name: 'Not wearing a seat belt', vehicleTypes: ['car', 'van', 'bus', 'lorry'] },
+  { name: 'Driving without a valid licence or insurance' },
+  { name: 'Drunk driving' },
+  { name: 'Blocking an emergency vehicle' },
+  { name: 'Noise or emission violation' },
+  { name: 'Other' },
 ];
 
 /** The most offences one report may name. */

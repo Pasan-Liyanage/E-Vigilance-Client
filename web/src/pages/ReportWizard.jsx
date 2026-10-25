@@ -11,7 +11,8 @@ import { ensureFileType } from '../utils/fileType';
 import { useToast } from '../context/ToastContext';
 import { useOnline } from '../hooks/useOnline';
 import {
-  VEHICLE_TYPES, ISSUE_TYPES, MAX_EVIDENCE_FILES, MAX_FILE_MB, MAX_PHOTO_MB, MAX_OFFENCES,
+  VEHICLE_TYPES, FALLBACK_ISSUES, MAX_EVIDENCE_FILES, MAX_FILE_MB, MAX_PHOTO_MB, MAX_OFFENCES,
+  appliesToVehicle, currentVehicleLabel, vehicleNoun, vehicleTypeOf,
   MAX_REPORT_AGE_DAYS, DESCRIPTION_MIN, DESCRIPTION_MAX,
 } from '../constants';
 import { Field, Modal, StatusBadge } from '../components/ui';
@@ -80,6 +81,9 @@ const readDraft = () => {
       description: rest.description ?? additionalDetails ?? '',
       clientReportId: rest.clientReportId || newReportId(),
       offenceIds: Array.isArray(rest.offenceIds) ? rest.offenceIds : [],
+      vehicleType: currentVehicleLabel(rest.vehicleType ?? ''),
+      // A choice from an earlier built-in list is asked again.
+      issueType: FALLBACK_ISSUES.some((i) => i.name === rest.issueType) ? rest.issueType : '',
     };
   } catch {
     return emptyForm();
@@ -93,7 +97,7 @@ export default function ReportWizard() {
 
   const [step, setStep] = useState(0);
   const [form, setForm] = useState(readDraft);
-  // null while loading; [] when none are published, which falls back to ISSUE_TYPES.
+  // null while loading; [] when none are published, which falls back to FALLBACK_ISSUES.
   const [offences, setOffences] = useState(null);
   // A suspended citizen cannot send reports; the server refuses them too.
   const [suspended, setSuspended] = useState(false);
@@ -145,6 +149,28 @@ export default function ReportWizard() {
       .catch(() => { /* the server refuses a suspended account's report anyway */ });
     return () => { alive = false; };
   }, []);
+
+  // A new vehicle type drops offences that can't happen with it, and says so:
+  // from the published list, or the built-in one when that couldn't load.
+  useEffect(() => {
+    const type = vehicleTypeOf(form.vehicleType);
+    const noun = vehicleNoun(form.vehicleType);
+    if (offences?.length && form.offenceIds.length) {
+      const dropped = form.offenceIds
+        .map((c) => offences.find((o) => o.code === c))
+        .filter((o) => o && !appliesToVehicle(o, type));
+      if (dropped.length) {
+        set({ offenceIds: form.offenceIds.filter((c) => !dropped.some((o) => o.code === c)) });
+        toast.info(`Removed ${dropped.map((o) => `"${o.name}"`).join(', ')}: it doesn't apply to ${noun}.`);
+      }
+    }
+    const issue = FALLBACK_ISSUES.find((i) => i.name === form.issueType);
+    if (issue && !appliesToVehicle(issue, type)) {
+      set({ issueType: '' });
+      toast.info(`Removed "${issue.name}": it doesn't apply to ${noun}.`);
+    }
+    // Runs when the vehicle or the list changes, not on every offence picked.
+  }, [form.vehicleType, offences]);
 
   // Mirror media in a ref so the unmount cleanup sees the latest list.
   const mediaRef = useRef(media);
@@ -240,6 +266,11 @@ export default function ReportWizard() {
 
   // With published offences the report names their codes; without, free text.
   const useSchedule = Boolean(offences?.length);
+  // Only offences that can happen with the chosen vehicle ("No helmet" isn't
+  // offered for a car). The server and the admin system check the same.
+  const vehicleType = vehicleTypeOf(form.vehicleType);
+  const fittingOffences = offences ? offences.filter((o) => appliesToVehicle(o, vehicleType)) : null;
+  const fittingIssues = FALLBACK_ISSUES.filter((i) => appliesToVehicle(i, vehicleType));
   const legacyIssue = form.issueType === 'Other' ? form.customIssue.trim() : form.issueType;
   const resolvedIssue = useSchedule
     ? form.offenceIds.map((c) => offences.find((o) => o.code === c)?.name).filter(Boolean).join('; ')
@@ -268,9 +299,17 @@ export default function ReportWizard() {
     }
     if (index === 3) {
       if (useSchedule) {
+        const misfit = form.offenceIds
+          .map((c) => offences.find((o) => o.code === c))
+          .find((o) => o && !appliesToVehicle(o, vehicleType));
         if (!form.offenceIds.length) e.offenceIds = 'Select what the driver did.';
+        else if (misfit) {
+          e.offenceIds = `"${misfit.name}" doesn't apply to ${vehicleNoun(form.vehicleType)}. Remove it, or go back and correct the vehicle type.`;
+        }
       } else if (!form.issueType) {
         e.offenceIds = 'Select what the driver did.';
+      } else if (!fittingIssues.some((i) => i.name === form.issueType)) {
+        e.offenceIds = `"${form.issueType}" doesn't apply to ${vehicleNoun(form.vehicleType)}. Choose again, or go back and correct the vehicle type.`;
       } else if (form.issueType === 'Other' && !form.customIssue.trim()) {
         e.customIssue = 'Describe the violation.';
       }
@@ -293,7 +332,7 @@ export default function ReportWizard() {
     }
     setErrors(e);
     return Object.keys(e).length === 0;
-  }, [form, useSchedule]);
+  }, [form, useSchedule, offences, vehicleType, fittingIssues]);
 
   const next = () => {
     if (!validateStep(step)) return;
@@ -471,7 +510,7 @@ export default function ReportWizard() {
             media={media} addFiles={addFiles} removeMedia={removeMedia} preparing={preparing}
             onCancelOptimise={cancelOptimise}
             voiceNote={voiceNote} setVoiceNote={setVoiceNote}
-            offences={offences} useSchedule={useSchedule}
+            offences={fittingOffences} issues={fittingIssues} useSchedule={useSchedule}
             resolvedIssue={resolvedIssue} goTo={goTo} toast={toast}
           />
         </div>
@@ -786,7 +825,7 @@ function StepWhen({ form, set, errors }) {
 }
 
 /* ============================= Step 4 - Issue ============================= */
-function StepIssue({ form, set, errors, offences, useSchedule, toast }) {
+function StepIssue({ form, set, errors, offences, issues, useSchedule, toast }) {
   const [query, setQuery] = useState('');
 
   const toggle = (code) => {
@@ -808,6 +847,9 @@ function StepIssue({ form, set, errors, offences, useSchedule, toast }) {
       <div>
         <h2>What happened?</h2>
         <p className="muted mt-4">
+          {form.vehicleType && form.vehicleType !== 'Other'
+            ? `Only offences that apply to ${vehicleNoun(form.vehicleType)} are listed. `
+            : ''}
           {useSchedule
             ? `Choose every offence you saw, up to ${MAX_OFFENCES}.`
             : 'Pick the option that best describes the violation.'}
@@ -850,14 +892,14 @@ function StepIssue({ form, set, errors, offences, useSchedule, toast }) {
       ) : (
         <>
           <div className="option-list">
-            {ISSUE_TYPES.map((issue) => (
+            {issues.map(({ name }) => (
               <button
-                key={issue}
-                className={`option ${form.issueType === issue ? 'selected' : ''}`}
-                onClick={() => set({ issueType: issue, offenceIds: [] })}
+                key={name}
+                className={`option ${form.issueType === name ? 'selected' : ''}`}
+                onClick={() => set({ issueType: name, offenceIds: [] })}
               >
                 <span className="check"><Check size={13} /></span>
-                <span className="grow">{issue}</span>
+                <span className="grow">{name}</span>
               </button>
             ))}
           </div>

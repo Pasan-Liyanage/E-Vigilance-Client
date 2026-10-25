@@ -103,7 +103,7 @@ class ReportService {
     const contract = Array.isArray(body.offenceIds) || typeof body.offenceIds === 'string';
     let offences = null;
     if (contract) {
-      offences = await OffenceService.resolve(parseList(body.offenceIds, 'offenceIds'));
+      offences = await OffenceService.resolve(parseList(body.offenceIds, 'offenceIds'), body.vehicleType);
     } else if (!String(body.issueType || '').trim()) {
       throw ApiError.badRequest('Choose what the driver did.');
     }

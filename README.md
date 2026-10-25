@@ -285,6 +285,7 @@ All authenticated routes need `Authorization: Bearer <token>`.
 `GET /api/offences`; JSON text in a multipart form), `occurredAt*` (ISO, within 30 days),
 `injuries`, `description*` (10–2000), `latitude*`, `longitude*` (inside Sri Lanka), `location`,
 and `evidenceMeta` (multipart only: `[{ capturedInApp, capturedAt }]`, one per file, in order).
+Every offence must apply to the vehicle type (an offence's `vehicleTypes`; empty = all).
 `*` = required. As JSON, send the same fields with `evidence: [{ key, originalName,
 capturedInApp, capturedAt }]` and `voiceNote: { key, originalName }` using keys from
 `POST /api/uploads`. Builds from before the contract may still send `issueType`, `dateTime` and
