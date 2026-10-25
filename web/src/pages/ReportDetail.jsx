@@ -220,6 +220,17 @@ export default function ReportDetail() {
 
       {question && <QuestionCard question={{ ...question, reportId: report._id }} onAnswer={reloadTimeline} />}
 
+      {/* Written by the admin panel when the authorities reject a report. */}
+      {report.status === 'Rejected' && report.rejectionReason && (
+        <div className="card card-pad row gap-12" style={{ alignItems: 'flex-start', borderLeft: '4px solid var(--red)' }}>
+          <Alert size={20} style={{ color: 'var(--red)', flexShrink: 0, marginTop: 2 }} />
+          <div className="stack gap-4">
+            <strong>Why this report was rejected</strong>
+            <p className="muted small" style={{ whiteSpace: 'pre-line' }}>{report.rejectionReason}</p>
+          </div>
+        </div>
+      )}
+
       <div className="detail-grid">
         <div className="stack gap-16">
           {media.length > 0 ? (

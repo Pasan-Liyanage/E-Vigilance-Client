@@ -78,6 +78,9 @@ const reportSchema = new mongoose.Schema(
       default: 'In Progress',
       index: true,
     },
+
+    // Set by the admin panel alongside status when a report is rejected.
+    rejectionReason: { type: String, default: null },
   },
   { timestamps: true, collection: 'reports' }
 );
