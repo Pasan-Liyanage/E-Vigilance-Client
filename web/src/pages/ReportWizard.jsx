@@ -61,8 +61,9 @@ const emptyForm = () => ({
   dateTime: toLocalInput(new Date()),
   // Codes from the police's published offences (GET /api/offences).
   offenceIds: [],
-  // Used only while the police have published no offences yet.
-  issueType: '',
+  // Used only while the police have published no offences yet: the
+  // built-in choices (up to MAX_OFFENCES), and the text for "Other".
+  issueTypes: [],
   customIssue: '',
   injuries: null,
   location: '',
@@ -83,7 +84,10 @@ const readDraft = () => {
   try {
     const saved = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null');
     if (!saved) return emptyForm();
-    const { additionalDetails, ...rest } = saved;
+    const { additionalDetails, issueType, ...rest } = saved;
+    // Earlier versions kept one built-in choice; a choice from an older
+    // built-in list is asked again.
+    const issues = Array.isArray(rest.issueTypes) ? rest.issueTypes : issueType ? [issueType] : [];
     return {
       ...emptyForm(),
       ...rest,
@@ -91,8 +95,7 @@ const readDraft = () => {
       clientReportId: rest.clientReportId || newReportId(),
       offenceIds: Array.isArray(rest.offenceIds) ? rest.offenceIds : [],
       vehicleType: currentVehicleLabel(rest.vehicleType ?? ''),
-      // A choice from an earlier built-in list is asked again.
-      issueType: FALLBACK_ISSUES.some((i) => i.name === rest.issueType) ? rest.issueType : '',
+      issueTypes: issues.filter((n) => FALLBACK_ISSUES.some((i) => i.name === n)).slice(0, MAX_OFFENCES),
     };
   } catch {
     return emptyForm();
@@ -106,8 +109,11 @@ export default function ReportWizard() {
 
   const [step, setStep] = useState(0);
   const [form, setForm] = useState(readDraft);
-  // null while loading; [] when none are published, which falls back to FALLBACK_ISSUES.
+  // null while loading (or after a failed load); [] when the police have
+  // published none, which falls back to FALLBACK_ISSUES.
   const [offences, setOffences] = useState(null);
+  // The list couldn't be loaded: the citizen is told, and can try again.
+  const [offencesFailed, setOffencesFailed] = useState(false);
   // A suspended citizen cannot send reports; the server refuses them too.
   const [suspended, setSuspended] = useState(false);
   const [media, setMedia] = useState([]);      // { id, file, url, kind, capturedInApp, capturedAt }
@@ -137,13 +143,20 @@ export default function ReportWizard() {
     try { localStorage.setItem(DRAFT_KEY, JSON.stringify(form)); } catch { /* private mode */ }
   }, [form, done]);
 
-  // The offences to choose from, and whether this citizen may report at all.
-  // Neither blocks the screen: if a check fails, the server still applies it.
+  // The offences to choose from. A failed load is shown as such, never
+  // quietly replaced by the built-in list: that is only for when the police
+  // have published none.
+  const mounted = useRef(false);
   useEffect(() => {
-    let alive = true;
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
+  const loadOffences = useCallback(() => {
+    setOffences(null);
+    setOffencesFailed(false);
     api.offences()
       .then(({ offences: list = [] }) => {
-        if (!alive) return;
+        if (!mounted.current) return;
         setOffences(list);
         // A draft may name an offence the police have since withdrawn.
         const codes = new Set(list.map((o) => o.code));
@@ -152,7 +165,14 @@ export default function ReportWizard() {
           return kept.length === f.offenceIds.length ? f : { ...f, offenceIds: kept };
         });
       })
-      .catch(() => { if (alive) setOffences([]); });
+      .catch(() => { if (mounted.current) setOffencesFailed(true); });
+  }, []);
+  useEffect(() => { loadOffences(); }, [loadOffences]);
+
+  // Whether this citizen may report at all. Doesn't block the screen if the
+  // check fails: the server refuses a suspended account's report anyway.
+  useEffect(() => {
+    let alive = true;
     api.rewards()
       .then(({ rewards }) => { if (alive) setSuspended(Boolean(rewards?.suspended)); })
       .catch(() => { /* the server refuses a suspended account's report anyway */ });
@@ -173,10 +193,12 @@ export default function ReportWizard() {
         toast.info(`Removed ${dropped.map((o) => `"${o.name}"`).join(', ')}: it doesn't apply to ${noun}.`);
       }
     }
-    const issue = FALLBACK_ISSUES.find((i) => i.name === form.issueType);
-    if (issue && !appliesToVehicle(issue, type)) {
-      set({ issueType: '' });
-      toast.info(`Removed "${issue.name}": it doesn't apply to ${noun}.`);
+    const droppedIssues = form.issueTypes
+      .map((n) => FALLBACK_ISSUES.find((i) => i.name === n))
+      .filter((i) => i && !appliesToVehicle(i, type));
+    if (droppedIssues.length) {
+      set({ issueTypes: form.issueTypes.filter((n) => !droppedIssues.some((i) => i.name === n)) });
+      toast.info(`Removed ${droppedIssues.map((i) => `"${i.name}"`).join(', ')}: it doesn't apply to ${noun}.`);
     }
     // Runs when the vehicle or the list changes, not on every offence picked.
   }, [form.vehicleType, offences]);
@@ -284,7 +306,11 @@ export default function ReportWizard() {
   const vehicleType = vehicleTypeOf(form.vehicleType);
   const fittingOffences = offences ? offences.filter((o) => appliesToVehicle(o, vehicleType)) : null;
   const fittingIssues = FALLBACK_ISSUES.filter((i) => appliesToVehicle(i, vehicleType));
-  const legacyIssue = form.issueType === 'Other' ? form.customIssue.trim() : form.issueType;
+  // The built-in choices as one text, "Other" replaced by the citizen's words.
+  const legacyIssue = form.issueTypes
+    .map((n) => (n === 'Other' ? form.customIssue.trim() : n))
+    .filter(Boolean)
+    .join('; ');
   const resolvedIssue = useSchedule
     ? form.offenceIds.map((c) => offences.find((o) => o.code === c)?.name).filter(Boolean).join('; ')
     : legacyIssue;
@@ -311,7 +337,10 @@ export default function ReportWizard() {
       }
     }
     if (index === 3) {
-      if (useSchedule) {
+      const misfitIssue = form.issueTypes.find((n) => !fittingIssues.some((i) => i.name === n));
+      if (offencesFailed || offences === null) {
+        e.offenceIds = "The list of offences hasn't loaded. Check your connection and tap Try again.";
+      } else if (useSchedule) {
         const misfit = form.offenceIds
           .map((c) => offences.find((o) => o.code === c))
           .find((o) => o && !appliesToVehicle(o, vehicleType));
@@ -319,11 +348,11 @@ export default function ReportWizard() {
         else if (misfit) {
           e.offenceIds = `"${misfit.name}" doesn't apply to ${vehicleNoun(form.vehicleType)}. Remove it, or go back and correct the vehicle type.`;
         }
-      } else if (!form.issueType) {
+      } else if (!form.issueTypes.length) {
         e.offenceIds = 'Select what the driver did.';
-      } else if (!fittingIssues.some((i) => i.name === form.issueType)) {
-        e.offenceIds = `"${form.issueType}" doesn't apply to ${vehicleNoun(form.vehicleType)}. Choose again, or go back and correct the vehicle type.`;
-      } else if (form.issueType === 'Other' && !form.customIssue.trim()) {
+      } else if (misfitIssue) {
+        e.offenceIds = `"${misfitIssue}" doesn't apply to ${vehicleNoun(form.vehicleType)}. Remove it, or go back and correct the vehicle type.`;
+      } else if (form.issueTypes.includes('Other') && !form.customIssue.trim()) {
         e.customIssue = 'Describe the violation.';
       }
       if (form.injuries === null) e.injuries = 'Tell us whether anyone was hurt.';
@@ -349,7 +378,7 @@ export default function ReportWizard() {
     }
     setErrors(e);
     return Object.keys(e).length === 0;
-  }, [form, useSchedule, offences, vehicleType, fittingIssues]);
+  }, [form, useSchedule, offences, offencesFailed, vehicleType, fittingIssues]);
 
   const next = () => {
     if (!validateStep(step)) return;
@@ -478,7 +507,7 @@ export default function ReportWizard() {
   const Current = [StepEvidence, StepVehicle, StepWhen, StepIssue, StepLocation, StepDetails, StepReview][step];
   const isLast = step === STEPS.length - 1;
   const hasContent =
-    media.length > 0 || voiceNote || form.vehicleNumber || form.offenceIds.length || form.issueType || form.description;
+    media.length > 0 || voiceNote || form.vehicleNumber || form.offenceIds.length || form.issueTypes.length || form.description;
 
   return (
     <>
@@ -531,6 +560,7 @@ export default function ReportWizard() {
             onCancelOptimise={cancelOptimise}
             voiceNote={voiceNote} setVoiceNote={setVoiceNote}
             offences={fittingOffences} issues={fittingIssues} useSchedule={useSchedule}
+            offencesFailed={offencesFailed} onRetryOffences={loadOffences}
             resolvedIssue={resolvedIssue} goTo={goTo} toast={toast}
           />
         </div>
@@ -845,22 +875,29 @@ function StepWhen({ form, set, errors }) {
 }
 
 /* ============================= Step 4 - Issue ============================= */
-function StepIssue({ form, set, errors, offences, issues, useSchedule, toast }) {
+function StepIssue({ form, set, errors, offences, issues, useSchedule, offencesFailed, onRetryOffences, toast }) {
   const [query, setQuery] = useState('');
 
-  const toggle = (code) => {
-    const picked = form.offenceIds.includes(code);
-    if (!picked && form.offenceIds.length >= MAX_OFFENCES) {
-      toast.info(`You can choose up to ${MAX_OFFENCES} offences.`);
+  /** Adds or removes one choice from a list, up to MAX_OFFENCES. */
+  const toggleIn = (field, value) => {
+    const list = form[field];
+    const picked = list.includes(value);
+    if (!picked && list.length >= MAX_OFFENCES) {
+      toast.info(`You can choose up to ${MAX_OFFENCES} offences. Remove one to choose another.`);
       return;
     }
-    set({ offenceIds: picked ? form.offenceIds.filter((c) => c !== code) : [...form.offenceIds, code] });
+    set({ [field]: picked ? list.filter((v) => v !== value) : [...list, value] });
   };
 
   const q = query.trim().toLowerCase();
   const shown = useSchedule && q
     ? offences.filter((o) => `${o.name} ${o.description || ''}`.toLowerCase().includes(q))
     : offences || [];
+
+  // What's chosen so far, by name, from whichever list is showing.
+  const chosen = useSchedule
+    ? form.offenceIds.map((c) => offences.find((o) => o.code === c)?.name).filter(Boolean)
+    : form.issueTypes;
 
   return (
     <div className="stack gap-20">
@@ -870,15 +907,35 @@ function StepIssue({ form, set, errors, offences, issues, useSchedule, toast }) 
           {form.vehicleType && form.vehicleType !== 'Other'
             ? `Only offences that apply to ${vehicleNoun(form.vehicleType)} are listed. `
             : ''}
-          {useSchedule
-            ? `Choose every offence you saw, up to ${MAX_OFFENCES}.`
-            : 'Pick the option that best describes the violation.'}
+          A driver can commit several offences at once: choose every one you saw, up to {MAX_OFFENCES}.
         </p>
       </div>
 
       {errors.offenceIds && <span className="error-text">{errors.offenceIds}</span>}
 
-      {offences === null ? (
+      {chosen.length > 0 && (
+        <div className="card card-pad stack gap-4" aria-live="polite">
+          <span className="small strong">
+            {chosen.length} of {MAX_OFFENCES} chosen
+          </span>
+          <span className="tiny muted">{chosen.join(' · ')}</span>
+        </div>
+      )}
+
+      {offencesFailed ? (
+        <div className="card card-pad stack gap-10" role="alert" style={{ borderColor: 'var(--red)' }}>
+          <div className="row gap-8" style={{ alignItems: 'flex-start' }}>
+            <Alert size={18} style={{ flex: 'none', marginTop: 2, color: 'var(--red)' }} />
+            <span className="small">
+              <strong>The list of offences couldn't be loaded.</strong>{' '}
+              Check your connection, then try again. Your report so far is saved.
+            </span>
+          </div>
+          <button className="btn btn-outline" style={{ alignSelf: 'flex-start' }} onClick={onRetryOffences}>
+            Try again
+          </button>
+        </div>
+      ) : offences === null ? (
         <div className="row gap-10 small muted">
           <span className="spinner" style={{ color: 'var(--brand-600)' }} /> Loading the list of offences…
         </div>
@@ -891,12 +948,12 @@ function StepIssue({ form, set, errors, offences, issues, useSchedule, toast }) 
                 onChange={(e) => setQuery(e.target.value)} aria-label="Search offences" />
             </div>
           )}
-          <div className="option-list" role="group" aria-label="Offences">
+          <div className="option-list multi" role="group" aria-label="Offences">
             {shown.map((o) => (
               <button
                 key={o.code}
                 className={`option ${form.offenceIds.includes(o.code) ? 'selected' : ''}`}
-                onClick={() => toggle(o.code)}
+                onClick={() => toggleIn('offenceIds', o.code)}
                 aria-pressed={form.offenceIds.includes(o.code)}
               >
                 <span className="check"><Check size={13} /></span>
@@ -911,12 +968,13 @@ function StepIssue({ form, set, errors, offences, issues, useSchedule, toast }) 
         </>
       ) : (
         <>
-          <div className="option-list">
+          <div className="option-list multi" role="group" aria-label="Offences">
             {issues.map(({ name }) => (
               <button
                 key={name}
-                className={`option ${form.issueType === name ? 'selected' : ''}`}
-                onClick={() => set({ issueType: name, offenceIds: [] })}
+                className={`option ${form.issueTypes.includes(name) ? 'selected' : ''}`}
+                onClick={() => toggleIn('issueTypes', name)}
+                aria-pressed={form.issueTypes.includes(name)}
               >
                 <span className="check"><Check size={13} /></span>
                 <span className="grow">{name}</span>
@@ -924,7 +982,7 @@ function StepIssue({ form, set, errors, offences, issues, useSchedule, toast }) 
             ))}
           </div>
 
-          {form.issueType === 'Other' && (
+          {form.issueTypes.includes('Other') && (
             <Field label="Describe the violation" required error={errors.customIssue} htmlFor="custom">
               <input
                 id="custom"
