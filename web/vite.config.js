@@ -2,6 +2,21 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import basicSsl from '@vitejs/plugin-basic-ssl';
+import { execSync } from 'node:child_process';
+
+/** Which build this is, shown on the profile page: the commit and the date. */
+const BUILD = (() => {
+  // Hosts give the commit (Vercel, GitHub Actions); locally, ask git.
+  let commit = (process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA || '').slice(0, 7) || 'local';
+  if (commit === 'local') {
+    try {
+      const git = (cmd) => execSync(cmd, { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+      // A build with changes not yet committed says so.
+      commit = git('git rev-parse --short HEAD') + (git('git status --porcelain') ? '-modified' : '');
+    } catch { /* not a git checkout */ }
+  }
+  return `${commit}, ${new Date().toISOString().slice(0, 10)}`;
+})();
 
 const API_TARGET = process.env.VITE_API_PROXY || 'http://localhost:5050';
 
@@ -17,11 +32,15 @@ const HTTPS = process.env.HTTPS === 'true';
 
 export default defineConfig({
   base: BASE,
+  define: { __APP_BUILD__: JSON.stringify(BUILD) },
   plugins: [
     react(),
     ...(HTTPS ? [basicSsl()] : []),
     VitePWA({
-      registerType: 'autoUpdate',
+      // Updates are applied by components/UpdatePrompt.jsx: at once, except while a
+      // report is being written (a reload there would lose attached files).
+      registerType: 'prompt',
+      injectRegister: false,
       includeAssets: ['favicon.ico', 'favicon.svg', 'favicon-16.png', 'favicon-32.png', 'favicon-48.png', 'apple-touch-icon.png'],
       manifest: {
         // A stable id keeps this the *same* installed app across deploys.

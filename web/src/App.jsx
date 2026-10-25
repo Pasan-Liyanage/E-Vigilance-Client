@@ -4,6 +4,7 @@ import { useTheme } from './hooks/useTheme';
 import AppShell from './components/AppShell';
 import ProtectedRoute from './components/ProtectedRoute';
 import InstallPrompt from './components/InstallPrompt';
+import UpdatePrompt from './components/UpdatePrompt';
 
 import Info from './pages/Info';
 import Welcome from './pages/Welcome';
@@ -36,6 +37,7 @@ export default function App() {
   return (
     <>
       <InstallPrompt />
+      <UpdatePrompt />
       <Routes>
         {/* The shared link lands here for everyone; "Try app" leads into the app. */}
         <Route path="/" element={<Info />} />

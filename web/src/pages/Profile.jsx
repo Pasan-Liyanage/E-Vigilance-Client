@@ -1,3 +1,4 @@
+/* global __APP_BUILD__ */
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -434,7 +435,8 @@ export default function Profile({ theme, onToggleTheme }) {
         </button>
       </section>
 
-      <p className="tiny subtle text-center">E-Vigilance · Version 1.0.0</p>
+      {/* The build (commit and date) tells which version this device is running. */}
+      <p className="tiny subtle text-center">E-Vigilance · Version 1.0.0 · Build {__APP_BUILD__}</p>
 
       <Modal
         open={confirmOut}

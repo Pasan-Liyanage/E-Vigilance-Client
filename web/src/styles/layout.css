@@ -470,6 +470,18 @@ audio { width: 100%; height: 40px; }
 }
 [data-theme='dark'] .install-bar { background: rgba(87, 161, 217, 0.16); border-color: rgba(87, 161, 217, 0.32); color: var(--brand-200); }
 
+/* A newer version is ready while a report is being written (components/UpdatePrompt.jsx). */
+.update-bar {
+  position: fixed; left: 12px; right: 12px; bottom: calc(76px + env(safe-area-inset-bottom));
+  z-index: 60; max-width: 560px; margin: 0 auto;
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px; border-radius: var(--r-lg);
+  background: var(--brand-50); border: 1px solid var(--brand-200); color: var(--brand-800);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+.update-bar .btn { flex: none; }
+[data-theme='dark'] .update-bar { background: #13233a; border-color: rgba(87, 161, 217, 0.32); color: var(--brand-200); }
+
 /* Evidence whose file is gone (deleted, or its host unreachable). */
 .media-missing {
   display: flex; flex-direction: column; align-items: center; gap: 6px;
