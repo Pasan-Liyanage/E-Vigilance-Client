@@ -266,6 +266,8 @@ All authenticated routes need `Authorization: Bearer <token>`.
 | `POST` | `/api/auth/phone/code` | ✓ | – | Text a 6-digit code to the phone → `{ sentTo, expiresInMinutes }` |
 | `POST` | `/api/auth/phone/verify` | ✓ | JSON: `code` | Verify the phone → `{ user }` |
 | `GET` | `/api/offences` | ✓ | – | Offences a citizen can report → `{ offences: [{ code, name, description, vehicleTypes }] }` |
+| `POST` | `/api/location/resolve` | ✓ | JSON: `text` | A pasted Google Maps link (short links too) or coordinates → `{ place: { latitude, longitude, exact } }`; `exact: false` = only the map's centre was found |
+| `GET` | `/api/location/station` | ✓ | `?lat=&lng=` | The police station a pin falls to, by the admin system's rule → `{ station: { name, by: 'area'\|'nearest', distanceKm } \| null }` |
 | `POST` | `/api/uploads` | ✓ | JSON: `name, type, size, kind?` | Signed URL to PUT one file into R2 → `{ key, uploadUrl, contentType }` |
 | `POST` | `/api/reports` | ✓ | `multipart/form-data` or JSON | Create a report → `201`, or `200` with `duplicate: true` for a `clientReportId` already received |
 | `GET` | `/api/reports` | ✓ | `?stage=waiting\|review\|closed&search=&page=&limit=` | The user's reports, each with `stage` and `latestUpdate` |
@@ -284,6 +286,8 @@ All authenticated routes need `Authorization: Bearer <token>`.
 `vehicleType*`, `vehicleNumber*`, `vehicleModel`, `offenceIds*` (1–5 codes from
 `GET /api/offences`; JSON text in a multipart form), `occurredAt*` (ISO, within 30 days),
 `injuries`, `description*` (10–2000), `latitude*`, `longitude*` (inside Sri Lanka), `location`,
+`locationConfirmed*` (must be `true`: the citizen checked the pin), `locationSource`
+(`gps`, `photo`, `map`, `link` or `coordinates`), `locationAccuracy` (metres, GPS only),
 and `evidenceMeta` (multipart only: `[{ capturedInApp, capturedAt }]`, one per file, in order).
 Every offence must apply to the vehicle type (an offence's `vehicleTypes`; empty = all).
 `*` = required. As JSON, send the same fields with `evidence: [{ key, originalName,

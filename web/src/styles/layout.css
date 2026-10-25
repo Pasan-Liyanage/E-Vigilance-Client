@@ -397,6 +397,33 @@ audio { width: 100%; height: 40px; }
 }
 .map-frame iframe { width: 100%; height: 100%; border: 0; display: block; }
 
+/* The location step's live map (components/LocationMap.jsx). Taller on a
+   phone so a pin is easy to place with a thumb. */
+.leaflet-host { aspect-ratio: 4 / 5; position: relative; z-index: 0; }
+@media (min-width: 640px) { .leaflet-host { aspect-ratio: 16 / 11; } }
+.map-failed { display: grid; place-items: center; padding: 20px; text-align: center; }
+.pin-icon { background: none; border: 0; }
+.pin-icon span {
+  display: block; width: 28px; height: 28px;
+  border-radius: 50% 50% 50% 0; transform: rotate(-45deg);
+  background: var(--brand-600); border: 3px solid #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+.pin-check {
+  display: flex; gap: 12px; align-items: flex-start;
+  padding: 14px 16px; border-radius: var(--r-md);
+  border: 1.5px solid var(--border); background: var(--surface);
+  cursor: pointer;
+}
+.pin-check.checked { border-color: var(--green); background: var(--green-bg); }
+.pin-check input { width: 20px; height: 20px; margin-top: 1px; accent-color: var(--green); flex: none; }
+.place-results { display: grid; gap: 6px; }
+.place-results button {
+  text-align: left; padding: 10px 12px; border-radius: var(--r-md);
+  border: 1px solid var(--border); background: var(--surface); color: var(--text);
+}
+.place-results button:hover { border-color: var(--brand-600); }
+
 /* ------------------------------- Issue types ----------------------------- */
 .option-list { display: grid; gap: 10px; }
 .option {

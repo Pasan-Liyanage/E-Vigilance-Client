@@ -66,6 +66,16 @@ const reportSchema = new mongoose.Schema(
     location: { type: String, default: null },
     latitude: { type: Number, default: null },
     longitude: { type: Number, default: null },
+    // How the pin was set, so triage can judge it (admin docs/11 §4):
+    // the phone's GPS at the scene, a photo's own location, a pin placed on
+    // the map, a pasted Google Maps link, or typed coordinates.
+    locationSource: {
+      type: String,
+      enum: ['gps', 'photo', 'map', 'link', 'coordinates', null],
+      default: null,
+    },
+    // The GPS fix's accuracy in metres, when it came from GPS.
+    locationAccuracy: { type: Number, default: null },
 
     description: { type: String, default: null },
     additionalDetails: { type: String, default: null },

@@ -14,6 +14,45 @@ function valid(lat, lng) {
   );
 }
 
+/** Sri Lanka's bounding box, the same as the server's (server/src/utils/srilanka.js). */
+export function insideSriLanka(latitude, longitude) {
+  return latitude >= 5.85 && latitude <= 9.9 && longitude >= 79.5 && longitude <= 81.95;
+}
+
+/**
+ * Places in Sri Lanka matching a search, from OpenStreetMap: up to five, so
+ * the citizen picks the right one rather than the first.
+ * Returns [{ latitude, longitude, label }].
+ */
+export async function searchPlaces(query) {
+  const q = String(query || '').trim();
+  if (!q) return [];
+  const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&countrycodes=lk&q=${encodeURIComponent(q)}`;
+  const res = await fetch(url, { headers: { Accept: 'application/json' } });
+  if (!res.ok) throw new Error(`Place search failed (${res.status})`);
+  return (await res.json())
+    .map((hit) => ({
+      latitude: Number(Number(hit.lat).toFixed(6)),
+      longitude: Number(Number(hit.lon).toFixed(6)),
+      label: hit.display_name,
+    }))
+    .filter((p) => valid(p.latitude, p.longitude) && insideSriLanka(p.latitude, p.longitude));
+}
+
+/** A short address for a point, or null (best effort, OpenStreetMap). */
+export async function addressOf(latitude, longitude) {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}&zoom=17`,
+      { headers: { Accept: 'application/json' } }
+    );
+    const data = await res.json();
+    return data?.display_name || null;
+  } catch {
+    return null;
+  }
+}
+
 function dmsToDecimal(deg, min, sec, dir) {
   const dec = Number(deg) + Number(min) / 60 + Number(sec) / 3600;
   return /[SW]/i.test(dir) ? -dec : dec;

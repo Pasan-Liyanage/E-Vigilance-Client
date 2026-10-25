@@ -141,6 +141,10 @@ export const api = {
 
   // The offences a citizen can report, published by the police.
   offences: () => request('/api/offences'),
+  // A pasted Google Maps link or coordinates, as a place to pin.
+  resolveLocation: (text) => request('/api/location/resolve', { method: 'POST', body: { text } }),
+  // The police station a pin falls to, by the admin system's rule.
+  stationFor: (lat, lng) => request(`/api/location/station?lat=${lat}&lng=${lng}`),
 
   // Multipart: files stream through the API into storage.
   createReport: (formData, onProgress) => upload('/api/reports', formData, onProgress),

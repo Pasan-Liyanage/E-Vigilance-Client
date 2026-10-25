@@ -22,7 +22,9 @@ import {
   Camera, Video, Image as ImageIcon, Mic, Car, Calendar, Alert, MapPin, FileText,
   CheckCircle, ChevronLeft, ChevronRight, X, Check, Crosshair, Send, Info, Plus, Clock, Search,
 } from '../components/Icons';
-import { extractCoordinates, geocodeAddress } from '../utils/coordinates';
+import { addressOf, insideSriLanka, searchPlaces } from '../utils/coordinates';
+import { photoLocation } from '../utils/photoLocation';
+import LocationMap from '../components/LocationMap';
 
 const STEPS = [
   { key: 'evidence', label: 'Evidence', icon: Camera },
@@ -64,8 +66,15 @@ const emptyForm = () => ({
   customIssue: '',
   injuries: null,
   location: '',
+  // The address was filled in from the pin, so a new pin may replace it.
+  locationAutoAddress: false,
   latitude: null,
   longitude: null,
+  // How the pin was set (gps, photo, map, link, coordinates), the GPS
+  // accuracy in metres, and whether the citizen confirmed the exact spot.
+  locationSource: null,
+  locationAccuracy: null,
+  locationConfirmed: false,
   description: '',
 });
 
@@ -201,6 +210,9 @@ export default function ReportWizard() {
         // Some Android pickers return a File with an empty type; give it one
         // before anything else looks at it.
         const original = ensureFileType(picked, picked.type?.startsWith('video/') ? 'video' : 'image');
+        // Where a gallery photo was taken, read before compressing drops it.
+        // Offered on the location step; never used unless the citizen picks it.
+        const place = capturedInApp ? null : await photoLocation(original);
         // Large photos are downscaled and large videos re-encoded here, so
         // they upload quickly and fit under the per-file limit.
         let file;
@@ -243,6 +255,7 @@ export default function ReportWizard() {
           url: URL.createObjectURL(file),
           capturedInApp,
           capturedAt,
+          place,
         });
       }
     } finally {
@@ -319,7 +332,11 @@ export default function ReportWizard() {
       // The police are routed to the nearest station from these coordinates,
       // so a typed address alone is not enough.
       if (form.latitude == null || form.longitude == null) {
-        e.location = 'Pin the location: tap "Use my current location", or type the address and tap "Find on map".';
+        e.location = 'Place the pin: use your location, search for the place, or tap the map.';
+      } else if (!insideSriLanka(form.latitude, form.longitude)) {
+        e.location = 'The pin must be in Sri Lanka.';
+      } else if (!form.locationConfirmed) {
+        e.location = 'Check the pin on the map, then confirm it is exactly where it happened.';
       }
     }
     if (index === 5) {
@@ -375,6 +392,9 @@ export default function ReportWizard() {
       location: form.location.trim() || undefined,
       latitude: form.latitude != null ? String(form.latitude) : undefined,
       longitude: form.longitude != null ? String(form.longitude) : undefined,
+      locationSource: form.locationSource || undefined,
+      locationAccuracy: form.locationAccuracy != null ? String(form.locationAccuracy) : undefined,
+      locationConfirmed: form.locationConfirmed === true,
       description: form.description.trim(),
     };
     const offenceIds = useSchedule ? form.offenceIds : undefined;
@@ -955,150 +975,292 @@ function EmergencyNotice() {
 }
 
 /* ============================ Step 5 - Location =========================== */
-function StepLocation({ form, set, errors, toast }) {
+
+/** How each way of setting the pin is described to the citizen (and in triage). */
+const SOURCE_TEXT = {
+  gps: "Your phone's location",
+  photo: 'Where your photo was taken',
+  map: 'Placed on the map',
+  link: 'From a Google Maps link',
+  coordinates: 'From coordinates',
+};
+
+/** A GPS fix less precise than this, in metres, needs a careful look. */
+const ROUGH_GPS_M = 100;
+
+function StepLocation({ form, set, errors, toast, media }) {
   const [locating, setLocating] = useState(false);
-  const [finding, setFinding] = useState(false);
   const [geoError, setGeoError] = useState('');
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState(null);
+  const [searching, setSearching] = useState(false);
+  const [paste, setPaste] = useState('');
+  const [resolving, setResolving] = useState(false);
+  // A link that only gave the map's centre, not a dropped pin.
+  const [roughLink, setRoughLink] = useState(false);
+  // undefined while unknown; null when HQ will choose.
+  const [station, setStation] = useState(undefined);
+  const latest = useRef(0);
 
-  /** Pins the typed address: typed coordinates first, else an OpenStreetMap lookup. */
-  const findOnMap = async () => {
+  const hasCoords = form.latitude != null && form.longitude != null;
+  const photos = media.filter((m) => m.place);
+
+  /**
+   * Puts the pin somewhere. Every new pin has to be confirmed again. The
+   * address is filled in for the citizen unless they typed their own.
+   */
+  const pin = async (latitude, longitude, source, accuracy = null) => {
     setGeoError('');
-    const typed = extractCoordinates(form.location);
-    if (typed) {
-      set(typed);
-      toast.success('Location pinned.');
-      return;
-    }
-
-    setFinding(true);
-    try {
-      const hit = await geocodeAddress(form.location);
-      if (hit) {
-        set({ latitude: hit.latitude, longitude: hit.longitude });
-        toast.success('Location pinned. Check the map is right.');
-      } else {
-        setGeoError("We couldn't find that place on the map. Add the road and town, or use your current location.");
-      }
-    } catch {
-      setGeoError("We couldn't look up that address right now. Try again, or use your current location.");
-    } finally {
-      setFinding(false);
-    }
+    set({ latitude, longitude, locationSource: source, locationAccuracy: accuracy, locationConfirmed: false });
+    if (form.location.trim() && !form.locationAutoAddress) return;
+    const ticket = ++latest.current;
+    const label = await addressOf(latitude, longitude);
+    if (label && ticket === latest.current) set({ location: label, locationAutoAddress: true });
   };
+
+  // Which police station the pin falls to, as the admin system will decide.
+  useEffect(() => {
+    if (!hasCoords) { setStation(undefined); return undefined; }
+    let alive = true;
+    const id = setTimeout(() => {
+      api.stationFor(form.latitude, form.longitude)
+        .then(({ station: s }) => { if (alive) setStation(s); })
+        .catch(() => { if (alive) setStation(undefined); });
+    }, 400);
+    return () => { alive = false; clearTimeout(id); };
+  }, [form.latitude, form.longitude, hasCoords]);
 
   const useMyLocation = () => {
     setGeoError('');
-
     if (!navigator.geolocation) {
-      setGeoError('This browser does not support location. Please type the address instead.');
+      setGeoError('This browser does not support location. Search for the place, or paste a Google Maps link.');
       return;
     }
     if (!window.isSecureContext && !['localhost', '127.0.0.1'].includes(window.location.hostname)) {
-      setGeoError('Location needs a secure (HTTPS) page. Please type the address instead.');
+      setGeoError('Location needs a secure (HTTPS) page. Search for the place, or paste a Google Maps link.');
       return;
     }
-
     setLocating(true);
     navigator.geolocation.getCurrentPosition(
-      async ({ coords }) => {
+      ({ coords }) => {
         const latitude = Number(coords.latitude.toFixed(6));
         const longitude = Number(coords.longitude.toFixed(6));
-        set({ latitude, longitude });
-
-        // Best-effort reverse geocode; the typed address always wins if it fails.
-        try {
-          const res = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}&zoom=17`,
-            { headers: { Accept: 'application/json' } }
-          );
-          const data = await res.json();
-          if (data?.display_name) set({ location: data.display_name });
-          else set({ location: `${latitude}, ${longitude}` });
-        } catch {
-          set({ location: `${latitude}, ${longitude}` });
-        }
-
-        toast.success('Location captured.');
         setLocating(false);
+        if (!insideSriLanka(latitude, longitude)) {
+          setGeoError('Your location is outside Sri Lanka. Search for the place, or place the pin on the map.');
+          return;
+        }
+        setRoughLink(false);
+        pin(latitude, longitude, 'gps', Math.round(coords.accuracy));
       },
       (err) => {
-        const map = {
-          1: 'Location permission was blocked. Allow it in your browser settings, or type the address below.',
-          2: 'Your location is unavailable right now. Please type the address below.',
-          3: 'Finding your location took too long. Please try again or type the address.',
+        const message = {
+          1: 'Location permission was blocked. Allow it in your browser settings, or search for the place.',
+          2: 'Your location is unavailable right now. Search for the place, or place the pin on the map.',
+          3: 'Finding your location took too long. Try again, or search for the place.',
         };
-        setGeoError(map[err.code] || err.message);
+        setGeoError(message[err.code] || err.message);
         setLocating(false);
       },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
     );
   };
 
-  const hasCoords = form.latitude != null && form.longitude != null;
-  const bbox = hasCoords
-    ? [form.longitude - 0.004, form.latitude - 0.003, form.longitude + 0.004, form.latitude + 0.003].join(',')
-    : null;
+  const search = async (e) => {
+    e.preventDefault();
+    if (!query.trim()) return;
+    setSearching(true);
+    setGeoError('');
+    try {
+      const found = await searchPlaces(query);
+      setResults(found);
+      if (!found.length) setGeoError('No place in Sri Lanka matches that. Try a road and town, such as "Peradeniya Road, Kandy".');
+    } catch {
+      setGeoError("We couldn't search right now. Try again, or use your current location.");
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const choose = (place) => {
+    setResults(null);
+    setRoughLink(false);
+    pin(place.latitude, place.longitude, 'map');
+    toast.info('Now move the pin to the exact spot.');
+  };
+
+  const usePaste = async (e) => {
+    e.preventDefault();
+    if (!paste.trim()) return;
+    setResolving(true);
+    setGeoError('');
+    try {
+      const { place } = await api.resolveLocation(paste);
+      pin(place.latitude, place.longitude, /https?:\/\//i.test(paste) ? 'link' : 'coordinates');
+      setRoughLink(!place.exact);
+      setPaste('');
+      toast.success('Pin placed. Check it on the map.');
+    } catch (err) {
+      setGeoError(err.message);
+    } finally {
+      setResolving(false);
+    }
+  };
+
+  const rough = form.locationSource === 'gps' && form.locationAccuracy > ROUGH_GPS_M;
 
   return (
     <div className="stack gap-20">
       <div>
         <h2>Where did it happen?</h2>
-        <p className="muted mt-4">Capture your GPS position, or type the road and area.</p>
+        <p className="muted mt-4">
+          The pin decides which police station receives your report, so place it exactly where it happened.
+        </p>
       </div>
 
       <button className="btn btn-primary btn-lg btn-block" onClick={useMyLocation} disabled={locating}>
-        {locating ? <><span className="spinner" /> Finding your location…</> : <><Crosshair size={19} /> Use my current location</>}
+        {locating ? <><span className="spinner" /> Finding your location…</> : <><Crosshair size={19} /> I'm there now: use my location</>}
       </button>
 
+      {photos.length > 0 && (
+        <div className="stack gap-8">
+          {photos.slice(0, 3).map((m, i) => (
+            <button key={m.id} className="btn btn-outline btn-block" onClick={() => { setRoughLink(false); pin(m.place.latitude, m.place.longitude, 'photo'); }}>
+              <ImageIcon size={17} /> Use where {photos.length > 1 ? `photo ${i + 1}` : 'your photo'} was taken
+            </button>
+          ))}
+        </div>
+      )}
+
+      <form className="stack gap-8" onSubmit={search}>
+        <label className="label" htmlFor="place-q">Or search for the place</label>
+        <div className="row gap-8">
+          <div className="input-group grow">
+            <span className="lead"><Search size={18} /></span>
+            <input id="place-q" className="input" placeholder="Road, junction or landmark, and town"
+              value={query} onChange={(e) => setQuery(e.target.value)} />
+          </div>
+          <button className="btn btn-outline" type="submit" disabled={searching || !query.trim()}>
+            {searching ? <span className="spinner" /> : 'Search'}
+          </button>
+        </div>
+      </form>
+
+      {results?.length > 0 && (
+        <div className="place-results" role="list" aria-label="Places found">
+          {results.map((p) => (
+            <button key={`${p.latitude},${p.longitude}`} role="listitem" onClick={() => choose(p)}>
+              <span className="small">{p.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
       {geoError && (
-        <div className="row gap-8" style={{ alignItems: 'flex-start', color: 'var(--red)' }}>
+        <div className="row gap-8" role="alert" style={{ alignItems: 'flex-start', color: 'var(--red)' }}>
           <Alert size={17} style={{ flex: 'none', marginTop: 2 }} />
           <span className="small">{geoError}</span>
         </div>
       )}
 
+      <div className="stack gap-8">
+        <LocationMap
+          latitude={form.latitude}
+          longitude={form.longitude}
+          accuracy={form.locationSource === 'gps' ? form.locationAccuracy : null}
+          onPick={(lat, lng) => { setRoughLink(false); pin(lat, lng, 'map'); }}
+        />
+        <span className="tiny subtle">Tap the map to place the pin, or drag it to the exact spot. Zoom in to check.</span>
+      </div>
+
       {hasCoords && (
-        <div className="stack gap-10">
-          <div className="map-frame">
-            <iframe
-              title="Location preview"
-              src={`https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${form.latitude},${form.longitude}`}
-              loading="lazy"
-            />
-          </div>
-          <div className="between small">
+        <div className="stack gap-12">
+          <div className="between gap-12 small">
             <span className="mono subtle">{form.latitude}, {form.longitude}</span>
-            <button className="btn btn-ghost btn-sm" onClick={() => set({ latitude: null, longitude: null })}>
-              <X size={14} /> Clear pin
-            </button>
+            <span className="subtle" style={{ textAlign: 'right' }}>
+              {SOURCE_TEXT[form.locationSource] || 'Pinned'}
+              {form.locationSource === 'gps' && form.locationAccuracy != null ? ` · within about ${form.locationAccuracy} m` : ''}
+            </span>
           </div>
+
+          {rough && (
+            <div className="card card-pad row gap-10" style={{ alignItems: 'flex-start', borderColor: 'var(--amber)' }}>
+              <Alert size={17} style={{ flex: 'none', marginTop: 2, color: 'var(--amber)' }} />
+              <span className="small muted">
+                Your phone only knows your position to within about {form.locationAccuracy} m. Drag the pin to the exact spot.
+              </span>
+            </div>
+          )}
+          {roughLink && (
+            <div className="card card-pad row gap-10" style={{ alignItems: 'flex-start', borderColor: 'var(--amber)' }}>
+              <Alert size={17} style={{ flex: 'none', marginTop: 2, color: 'var(--amber)' }} />
+              <span className="small muted">
+                That link only shows where the map was centred, not a dropped pin. Move the pin to the exact spot.
+              </span>
+            </div>
+          )}
+
+          {station !== undefined && (
+            <div className="row gap-10 small" style={{ alignItems: 'flex-start' }}>
+              <MapPin size={17} style={{ flex: 'none', marginTop: 2, color: 'var(--brand-600)' }} />
+              {station ? (
+                <span>
+                  {station.by === 'area' ? 'Police station for this area: ' : 'Nearest police station: '}
+                  <strong>{station.name}</strong>
+                  {station.by === 'nearest' && station.distanceKm != null ? ` (${station.distanceKm} km away)` : ''}
+                  <span className="tiny subtle" style={{ display: 'block' }}>
+                    Sri Lanka Police may pass it to another station.
+                  </span>
+                </span>
+              ) : (
+                <span className="muted">Sri Lanka Police will choose the station for this place.</span>
+              )}
+            </div>
+          )}
+
+          <label className={`pin-check ${form.locationConfirmed ? 'checked' : ''}`}>
+            <input
+              type="checkbox"
+              checked={Boolean(form.locationConfirmed)}
+              onChange={(e) => set({ locationConfirmed: e.target.checked })}
+            />
+            <span className="stack gap-4">
+              <strong className="small">The pin is exactly where it happened</strong>
+              <span className="tiny muted">
+                Zoom in and check the road and junction. A wrong pin can send your report to the wrong police station.
+              </span>
+            </span>
+          </label>
         </div>
       )}
 
-      <Field
-        label="Address or landmark"
-        hint="For example: Galle Road, near Liberty Plaza, Colombo 03"
-        htmlFor="loc"
-      >
+      <details className="card card-pad">
+        <summary className="small strong" style={{ cursor: 'pointer' }}>Paste a Google Maps link or coordinates</summary>
+        <form className="stack gap-10 mt-12" onSubmit={usePaste}>
+          <p className="tiny muted">
+            In Google Maps, press and hold the exact spot to drop a pin, tap Share, then Copy link, and paste it here.
+            Coordinates such as 6.9271, 79.8612 work too.
+          </p>
+          <div className="row gap-8">
+            <input className="input grow" placeholder="https://maps.app.goo.gl/…" value={paste}
+              onChange={(e) => setPaste(e.target.value)} aria-label="Google Maps link or coordinates" />
+            <button className="btn btn-outline" type="submit" disabled={resolving || !paste.trim()}>
+              {resolving ? <span className="spinner" /> : 'Use'}
+            </button>
+          </div>
+        </form>
+      </details>
+
+      <Field label="Address or landmark" hint="Optional. Helps the officer find the place, e.g. near Liberty Plaza." htmlFor="loc">
         <textarea
-          id="loc" className="textarea" style={{ minHeight: 84 }}
+          id="loc" className="textarea" style={{ minHeight: 72 }}
           placeholder="Road name, landmark, town…"
           value={form.location}
-          onChange={(e) => set({ location: e.target.value })}
+          onChange={(e) => set({ location: e.target.value, locationAutoAddress: false })}
         />
       </Field>
 
-      {!hasCoords && (
-        <button
-          className="btn btn-outline btn-block"
-          onClick={findOnMap}
-          disabled={finding || !form.location.trim()}
-        >
-          {finding ? <><span className="spinner" /> Finding on map…</> : <><Search size={17} /> Find on map</>}
-        </button>
-      )}
-
-      {errors?.location && !hasCoords && <span className="error-text">{errors.location}</span>}
+      {errors?.location && <span className="error-text">{errors.location}</span>}
     </div>
   );
 }
@@ -1144,7 +1306,13 @@ function StepReview({ form, media, voiceNote, resolvedIssue, goTo }) {
     { label: 'Date & time', step: 2, value: Number.isNaN(new Date(form.dateTime).getTime()) ? '—' : new Date(form.dateTime).toLocaleString(undefined, { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }) },
     { label: 'Offence', step: 3, value: resolvedIssue || '—' },
     { label: 'Anyone hurt', step: 3, value: form.injuries === true ? 'Yes' : form.injuries === false ? 'No' : '—' },
-    { label: 'Location', step: 4, value: form.location || (form.latitude != null ? `${form.latitude}, ${form.longitude}` : 'Not provided') },
+    {
+      label: 'Location',
+      step: 4,
+      value: form.latitude != null
+        ? `${form.location || `${form.latitude}, ${form.longitude}`} (${SOURCE_TEXT[form.locationSource] || 'pinned'}${form.locationConfirmed ? ', confirmed' : ''})`
+        : 'Not pinned',
+    },
     { label: 'What happened', step: 5, value: form.description.trim() || '—' },
   ];
 

@@ -116,6 +116,9 @@ async function main() {
       ...r,
       offenceIds,
       occurredAt: r.occurredAt().toISOString(),
+      // Placed and confirmed on the map, as the wizard requires.
+      locationSource: 'map',
+      locationConfirmed: true,
     });
     console.log(`${duplicate ? 'report exists' : 'report created'}: ${r.vehicleNumber}`);
   }

@@ -18,6 +18,8 @@ const DESCRIPTION_MIN = 10;
 const DESCRIPTION_MAX = 2000;
 /** Per-kind size limits (admin docs/11 §4); videos are also capped by MAX_UPLOAD_MB. */
 const KIND_LIMIT_MB = { image: 25, video: 500, audio: 100 };
+/** How a pin was set (admin docs/11 §4). */
+const LOCATION_SOURCES = ['gps', 'photo', 'map', 'link', 'coordinates'];
 
 /**
  * Media the browser uploaded straight to R2 arrives as object keys rather
@@ -143,6 +145,15 @@ class ReportService {
     if (latitude != null && longitude != null && !insideSriLanka(latitude, longitude)) {
       throw ApiError.badRequest('The place must be in Sri Lanka.');
     }
+    // The pin chooses the police station, so the citizen must have checked
+    // it on the map, however it was set.
+    if (contract && !(body.locationConfirmed === true || body.locationConfirmed === 'true')) {
+      throw ApiError.badRequest('Check the pin on the map and confirm it is exactly where it happened.');
+    }
+    const locationSource = LOCATION_SOURCES.includes(body.locationSource) ? body.locationSource : null;
+    const accuracy = numberOrNull(body.locationAccuracy);
+    const locationAccuracy =
+      locationSource === 'gps' && accuracy != null && accuracy >= 0 ? Math.round(accuracy) : null;
 
     if ((await ReportModel.countSince(userId, colomboDayStart())) >= DAILY_LIMIT) {
       throw new ApiError(
@@ -175,6 +186,8 @@ class ReportService {
         location: nullable(body.location),
         latitude,
         longitude,
+        locationSource,
+        locationAccuracy,
         description,
         additionalDetails: description,
         status: 'In Progress',

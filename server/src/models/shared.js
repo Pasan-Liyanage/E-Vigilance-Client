@@ -7,7 +7,9 @@ const mongoose = require('mongoose');
  *   Written by this app, read by the admin system:
  *     users, reports, report_replies, payout_requests, account_deletions
  *   Written by the admin system, read by this app:
- *     report_updates, reward_accounts, offence_schedule_public
+ *     report_updates, reward_accounts, offence_schedule_public, stations
+ *     (name, position and area only, to tell the citizen which police
+ *     station a pin falls to)
  *
  * The admin side's own documents use the raw driver shape, so they are read
  * here through the driver too, not through Mongoose models of our own.
@@ -19,6 +21,7 @@ const COLLECTIONS = Object.freeze({
   payoutRequests: 'payout_requests',
   accountDeletions: 'account_deletions',
   publicOffences: 'offence_schedule_public',
+  stations: 'stations',
 });
 
 /** A shared collection by its key in COLLECTIONS. */

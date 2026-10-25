@@ -17,6 +17,7 @@ const mediaRoutes = require('./src/routes/mediaRoutes');
 const uploadRoutes = require('./src/routes/uploadRoutes');
 const offenceRoutes = require('./src/routes/offenceRoutes');
 const rewardRoutes = require('./src/routes/rewardRoutes');
+const locationRoutes = require('./src/routes/locationRoutes');
 
 const app = express();
 
@@ -98,6 +99,8 @@ const hourlyLimiter = (max) =>
   });
 app.use('/api/auth/phone', hourlyLimiter(10));
 app.use('/api/rewards/payouts', hourlyLimiter(10));
+// Opening a pasted link reaches Google from this server: keep it modest.
+app.use('/api/location/resolve', hourlyLimiter(60));
 
 /* --------------------------------- Routes -------------------------------- */
 const apiInfo = (req, res) => {
@@ -116,6 +119,8 @@ const apiInfo = (req, res) => {
       'POST /api/auth/phone/code': 'Send a one-time code to the phone',
       'POST /api/auth/phone/verify': 'Verify the phone with the code',
       'GET  /api/offences': 'Offences a citizen can report',
+      'POST /api/location/resolve': 'A pasted Google Maps link or coordinates, as a place',
+      'GET  /api/location/station': 'The police station a place falls to',
       'GET  /api/rewards': 'Reward balance, lines, payouts and eligibility',
       'POST /api/rewards/payouts': 'Ask for a payout',
       'POST /api/uploads': 'Signed URL for uploading one file straight to R2',
@@ -140,6 +145,7 @@ app.use('/api/media', mediaRoutes);
 app.use('/api/uploads', uploadRoutes);
 app.use('/api/offences', offenceRoutes);
 app.use('/api/rewards', rewardRoutes);
+app.use('/api/location', locationRoutes);
 
 /* ------------------- Serve the built PWA (production) --------------------
  * When web/dist exists the API and the PWA are served from one origin, so no
