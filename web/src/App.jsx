@@ -14,6 +14,7 @@ import Reports from './pages/Reports';
 import ReportDetail from './pages/ReportDetail';
 import ReportWizard from './pages/ReportWizard';
 import Profile from './pages/Profile';
+import Rewards from './pages/Rewards';
 import NotFound from './pages/NotFound';
 
 /** Redirects signed-in users away from the public pages. */
@@ -46,6 +47,7 @@ export default function App() {
         <Route path="/reports" element={shell(<Reports />)} />
         <Route path="/reports/:id" element={shell(<ReportDetail />)} />
         <Route path="/report" element={shell(<ReportWizard />)} />
+        <Route path="/rewards" element={shell(<Rewards />)} />
         <Route path="/profile" element={shell(<Profile theme={theme} onToggleTheme={toggle} />)} />
 
         <Route path="*" element={<NotFound />} />

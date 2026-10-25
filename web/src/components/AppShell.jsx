@@ -1,7 +1,7 @@
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useOnline } from '../hooks/useOnline';
-import { Home, FileText, Plus, User, Sun, Moon, WifiOff, LogOut } from './Icons';
+import { Home, FileText, Plus, User, Sun, Moon, WifiOff, LogOut, Sparkle } from './Icons';
 import Logo from './Logo';
 
 const initials = (name = '') =>
@@ -43,6 +43,9 @@ export default function AppShell({ children, theme, onToggleTheme }) {
             </NavLink>
             <NavLink to="/report" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
               <Plus size={17} /> New Report
+            </NavLink>
+            <NavLink to="/rewards" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+              <Sparkle size={17} /> Rewards
             </NavLink>
           </nav>
 

@@ -1,17 +1,25 @@
 import { useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { STATUS_META } from '../constants';
+import { STATE_META, reportState } from '../constants';
 import { X, Inbox } from './Icons';
 
-/** Coloured status pill for a report. */
-export function StatusBadge({ status, size }) {
-  const meta = STATUS_META[status] || { cls: 'badge-neutral', label: status || 'Unknown' };
+/** Coloured pill for any state, from a `{ value: { cls, label } }` map. */
+export function Badge({ meta, value, size }) {
+  const m = meta[value] || { cls: 'badge-neutral', label: value || 'Unknown' };
   return (
-    <span className={`badge ${meta.cls}`} style={size === 'sm' ? { padding: '3px 9px', fontSize: '0.7rem' } : undefined}>
+    <span className={`badge ${m.cls}`} style={size === 'sm' ? { padding: '3px 9px', fontSize: '0.7rem' } : undefined}>
       <span className="dot" />
-      {meta.label}
+      {m.label}
     </span>
   );
+}
+
+/**
+ * A report's progress. `latestType` is the police's latest update when it is
+ * known; the list sends it with each report.
+ */
+export function StatusBadge({ report, latestType, size }) {
+  return <Badge meta={STATE_META} value={reportState(report, latestType)} size={size} />;
 }
 
 /** Bottom-sheet on mobile, centred dialog on desktop. */

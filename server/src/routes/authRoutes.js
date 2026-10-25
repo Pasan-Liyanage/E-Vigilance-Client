@@ -8,5 +8,8 @@ router.post('/register', AuthController.register);
 router.post('/login', AuthController.login);
 router.get('/me', AuthMiddleware.authenticate, AuthController.me);
 router.patch('/me', AuthMiddleware.authenticate, AuthController.updateMe);
+router.delete('/me', AuthMiddleware.authenticate, AuthController.deleteMe);
+router.post('/phone/code', AuthMiddleware.authenticate, AuthController.sendPhoneCode);
+router.post('/phone/verify', AuthMiddleware.authenticate, AuthController.verifyPhone);
 
 module.exports = router;

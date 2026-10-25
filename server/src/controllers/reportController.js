@@ -1,4 +1,5 @@
 const ReportService = require('../services/reportService');
+const UpdateService = require('../services/updateService');
 const StorageService = require('../services/storageService');
 
 /** HTTP layer for violation reports. */
@@ -6,13 +7,18 @@ class ReportController {
   /** POST /api/reports - multipart: evidence[] + voiceNote + wizard fields. */
   create = async (req, res, next) => {
     try {
-      const result = await ReportService.createReport(
+      const { report, duplicate } = await ReportService.createReport(
         req.userId,
         req.body,
         req.files || {},
         publicBaseUrl(req)
       );
-      res.status(201).json(result);
+      // A re-sent report (same clientReportId) returns the one already stored.
+      res.status(duplicate ? 200 : 201).json({
+        message: duplicate ? 'This report was already received' : 'Report submitted successfully',
+        duplicate,
+        report,
+      });
     } catch (err) {
       next(err);
     }
@@ -21,8 +27,8 @@ class ReportController {
   /** GET /api/reports */
   getUserReports = async (req, res, next) => {
     try {
-      const { status, search, page, limit } = req.query;
-      res.json(await ReportService.getUserReports(req.userId, { status, search, page, limit }));
+      const { stage, search, page, limit } = req.query;
+      res.json(await ReportService.getUserReports(req.userId, { stage, search, page, limit }));
     } catch (err) {
       next(err);
     }
@@ -41,6 +47,29 @@ class ReportController {
   getOne = async (req, res, next) => {
     try {
       res.json(await ReportService.getReportById(req.userId, req.params.id));
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  /**
+   * GET /api/reports/:id/updates - what the police said about the report,
+   * oldest first, and their open question if there is one.
+   */
+  getUpdates = async (req, res, next) => {
+    try {
+      const report = await ReportService.ownReport(req.userId, req.params.id);
+      res.json(await UpdateService.timeline(report));
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  /** POST /api/reports/:id/reply - the answer to the police's question. */
+  reply = async (req, res, next) => {
+    try {
+      const report = await ReportService.ownReport(req.userId, req.params.id);
+      res.status(201).json(await UpdateService.reply(req.userId, report, req.body?.answer));
     } catch (err) {
       next(err);
     }

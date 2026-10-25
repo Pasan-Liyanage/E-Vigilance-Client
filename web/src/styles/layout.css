@@ -205,6 +205,8 @@
 
 .filter-bar { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: none; }
 .filter-bar::-webkit-scrollbar { display: none; }
+/* Chips keep one line each; the bar scrolls sideways instead. */
+.filter-bar .chip { flex: none; white-space: nowrap; }
 
 /* ----------------------------- Report detail ----------------------------- */
 .detail-grid { display: grid; gap: 20px; }

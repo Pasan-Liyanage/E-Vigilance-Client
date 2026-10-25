@@ -134,6 +134,13 @@ export const api = {
   login: (payload) => request('/api/auth/login', { method: 'POST', body: payload, auth: false }),
   me: () => request('/api/auth/me'),
   updateProfile: (payload) => request('/api/auth/me', { method: 'PATCH', body: payload }),
+  // Personal details are removed; reports stay with the police without them.
+  deleteAccount: (password) => request('/api/auth/me', { method: 'DELETE', body: { password } }),
+  sendPhoneCode: () => request('/api/auth/phone/code', { method: 'POST' }),
+  verifyPhone: (code) => request('/api/auth/phone/verify', { method: 'POST', body: { code } }),
+
+  // The offences a citizen can report, published by the police.
+  offences: () => request('/api/offences'),
 
   // Multipart: files stream through the API into storage.
   createReport: (formData, onProgress) => upload('/api/reports', formData, onProgress),
@@ -141,14 +148,19 @@ export const api = {
   presignUpload: (payload) => request('/api/uploads', { method: 'POST', body: payload }),
   // JSON: media was already uploaded to R2, so only object keys are sent.
   createReportJson: (payload) => request('/api/reports', { method: 'POST', body: payload }),
+  /** @param {{ stage?: string, search?: string, limit?: number }} params */
   listReports: (params = {}) => {
     const qs = new URLSearchParams(
-      Object.entries(params).filter(
-        ([k, v]) => v !== undefined && v !== null && v !== '' && !(k === 'status' && v === 'All')
-      )
+      Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== '')
     ).toString();
     return request(`/api/reports${qs ? `?${qs}` : ''}`);
   },
   getReport: (id) => request(`/api/reports/${id}`),
+  // The police's updates, and their open question if there is one.
+  reportUpdates: (id) => request(`/api/reports/${id}/updates`),
+  replyToReport: (id, answer) => request(`/api/reports/${id}/reply`, { method: 'POST', body: { answer } }),
   stats: () => request('/api/reports/stats'),
+
+  rewards: () => request('/api/rewards'),
+  requestPayout: (payload) => request('/api/rewards/payouts', { method: 'POST', body: payload }),
 };

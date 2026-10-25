@@ -7,15 +7,16 @@ import { installSheetDismissed } from '../components/InstallPrompt';
 import { Skeleton, EmptyState } from '../components/ui';
 import ReportCard from '../components/ReportCard';
 import {
-  Plus, FileText, Clock, CheckCircle, X, Camera, ChevronRight,
-  Download, Alert, Refresh,
+  Plus, FileText, Clock, CheckCircle, Camera, ChevronRight,
+  Download, Alert, Refresh, Info, Sparkle,
 } from '../components/Icons';
 
+/** Counts by stage, from GET /api/reports/stats. */
 const STAT_TILES = [
   { key: 'total', label: 'Total reports', icon: FileText, color: 'var(--brand-600)', bg: 'var(--brand-50)' },
-  { key: 'inProgress', label: 'In progress', icon: Clock, color: 'var(--amber)', bg: 'var(--amber-bg)' },
-  { key: 'completed', label: 'Completed', icon: CheckCircle, color: 'var(--green)', bg: 'var(--green-bg)' },
-  { key: 'rejected', label: 'Rejected', icon: X, color: 'var(--red)', bg: 'var(--red-bg)' },
+  { key: 'waiting', label: 'Answer needed', icon: Info, color: 'var(--amber)', bg: 'var(--amber-bg)' },
+  { key: 'review', label: 'Being reviewed', icon: Clock, color: 'var(--brand-600)', bg: 'var(--brand-50)' },
+  { key: 'closed', label: 'Closed', icon: CheckCircle, color: 'var(--green)', bg: 'var(--green-bg)' },
 ];
 
 const greeting = () => {
@@ -173,7 +174,15 @@ export default function Dashboard() {
                 <span className="ai"><FileText size={20} /></span>
                 <span className="grow">
                   <span className="strong" style={{ display: 'block' }}>My reports</span>
-                  <span className="small muted">Check status and details</span>
+                  <span className="small muted">Check progress and answer questions</span>
+                </span>
+                <ChevronRight size={18} className="subtle" />
+              </Link>
+              <Link to="/rewards" className="action-tile">
+                <span className="ai"><Sparkle size={20} /></span>
+                <span className="grow">
+                  <span className="strong" style={{ display: 'block' }}>Rewards</span>
+                  <span className="small muted">Points earned and payouts</span>
                 </span>
                 <ChevronRight size={18} className="subtle" />
               </Link>
@@ -183,6 +192,10 @@ export default function Dashboard() {
           <section className="card card-pad stack gap-12">
             <h3>Before you report</h3>
             <ul className="stack gap-10 muted small" style={{ paddingLeft: 18, margin: 0 }}>
+              <li>
+                <strong style={{ color: 'var(--text)' }}>If someone is hurt or in danger, call 119 first.</strong>{' '}
+                This app is not for emergencies.
+              </li>
               <li>Never film while you are driving — stop somewhere safe first.</li>
               <li>Make sure the number plate is readable in at least one photo.</li>
               <li>Add the time and place as accurately as you can.</li>

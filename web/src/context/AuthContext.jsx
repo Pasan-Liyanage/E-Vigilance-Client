@@ -3,6 +3,8 @@ import { api, tokenStore, onUnauthorized } from '../api/client';
 
 const AuthContext = createContext(null);
 const USER_KEY = 'evigilance.user';
+/** The report wizard's saved draft (pages/ReportWizard.jsx). */
+export const DRAFT_KEY = 'evigilance.draft';
 
 const readCachedUser = () => {
   try { return JSON.parse(localStorage.getItem(USER_KEY) || 'null'); } catch { return null; }
@@ -17,11 +19,20 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(readCachedUser);
   const [loading, setLoading] = useState(Boolean(tokenStore.get()));
 
-  const signOut = useCallback(() => {
+  /**
+   * Ends the session. Signing out on purpose also drops the unsent report
+   * draft, which belongs to this person and not the next one to sign in; an
+   * expired session keeps it for when they sign in again.
+   */
+  const signOut = useCallback(({ keepDraft = false } = {}) => {
     tokenStore.clear();
     cacheUser(null);
+    if (!keepDraft) {
+      try { localStorage.removeItem(DRAFT_KEY); } catch { /* private mode */ }
+    }
     setUser(null);
   }, []);
+  const sessionExpired = useCallback(() => signOut({ keepDraft: true }), [signOut]);
 
   // Revalidate the stored token once on load.
   useEffect(() => {
@@ -32,15 +43,15 @@ export function AuthProvider({ children }) {
       .then(({ user: fresh }) => { if (alive) { setUser(fresh); cacheUser(fresh); } })
       .catch((err) => {
         // Only drop the session on a real auth failure - stay signed in when offline.
-        if (alive && err.status === 401) signOut();
+        if (alive && err.status === 401) sessionExpired();
       })
       .finally(() => { if (alive) setLoading(false); });
 
     return () => { alive = false; };
-  }, [signOut]);
+  }, [sessionExpired]);
 
   // The API client tells us when any request came back 401.
-  useEffect(() => onUnauthorized(signOut), [signOut]);
+  useEffect(() => onUnauthorized(sessionExpired), [sessionExpired]);
 
   const applySession = useCallback(({ token, user: u }) => {
     tokenStore.set(token);
@@ -61,6 +72,17 @@ export function AuthProvider({ children }) {
       cacheUser(u);
       setUser(u);
       return u;
+    },
+    verifyPhone: async (code) => {
+      const { user: u } = await api.verifyPhone(code);
+      cacheUser(u);
+      setUser(u);
+      return u;
+    },
+    // The server keeps no session to end; the token is simply refused from now on.
+    deleteAccount: async (password) => {
+      await api.deleteAccount(password);
+      signOut();
     },
   }), [user, loading, applySession, signOut]);
 

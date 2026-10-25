@@ -12,7 +12,7 @@ class AuthMiddleware {
 
       const decoded = AuthService.verifyToken(token);
       const user = await UserModel.findById(decoded.userId);
-      if (!user) throw ApiError.unauthorized('This account no longer exists.');
+      if (!user || user.deletedAt) throw ApiError.unauthorized('This account no longer exists.');
 
       req.userId = String(user._id);
       req.user = user;

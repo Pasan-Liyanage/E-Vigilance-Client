@@ -31,18 +31,46 @@ class UserModel {
     return count > 0;
   }
 
-  /** True when an account already uses this NIC. */
+  /**
+   * True when an account already uses this NIC. `nic` is canonical; accounts
+   * created before NICs were normalised may hold a lower-case "v" or "x".
+   */
   async nicExists(nic) {
-    const count = await User.countDocuments({ nic: String(nic).trim() });
+    const count = await User.countDocuments({ nic: { $in: [nic, nic.toLowerCase()] } });
     return count > 0;
   }
 
-  /** Updates the editable profile fields and returns the fresh document. */
+  /** Updates fields and returns the fresh document. */
   async updateProfile(userId, updates) {
     return User.findByIdAndUpdate(userId, updates, {
       new: true,
       runValidators: true,
     });
+  }
+
+  /**
+   * Removes the personal details of a deleted account. The document stays so
+   * the citizen's reports keep a valid owner id; it can't be signed in to.
+   */
+  async anonymise(userId, session) {
+    await User.updateOne(
+      { _id: userId },
+      {
+        $set: {
+          name: 'Deleted account',
+          email: `deleted-${userId}@deleted.invalid`,
+          nic: null,
+          phone: null,
+          dateOfBirth: null,
+          phoneVerified: false,
+          nicVerified: false,
+          phoneCode: null,
+          password: null,
+          deletedAt: new Date(),
+        },
+      },
+      { session }
+    );
   }
 }
 

@@ -9,5 +9,7 @@ router.post('/', AuthMiddleware.authenticate, handleUploadErrors, ReportControll
 router.get('/', AuthMiddleware.authenticate, ReportController.getUserReports);
 router.get('/stats', AuthMiddleware.authenticate, ReportController.getStats);
 router.get('/:id', AuthMiddleware.authenticate, ReportController.getOne);
+router.get('/:id/updates', AuthMiddleware.authenticate, ReportController.getUpdates);
+router.post('/:id/reply', AuthMiddleware.authenticate, ReportController.reply);
 
 module.exports = router;

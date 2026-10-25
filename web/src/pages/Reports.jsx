@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client';
-import { STATUS_FILTERS } from '../constants';
+import { STAGE_FILTERS } from '../constants';
 import { Skeleton, EmptyState } from '../components/ui';
 import ReportCard from '../components/ReportCard';
 import { Search, Plus, Alert, Refresh, X } from '../components/Icons';
 
 export default function Reports() {
   const [reports, setReports] = useState([]);
-  const [status, setStatus] = useState('All');
+  const [stage, setStage] = useState('');
   const [search, setSearch] = useState('');
   const [debounced, setDebounced] = useState('');
   const [loading, setLoading] = useState(true);
@@ -25,7 +25,7 @@ export default function Reports() {
     setLoading(true);
     setFailed(false);
     try {
-      const { reports: list } = await api.listReports({ status, search: debounced, limit: 100 });
+      const { reports: list } = await api.listReports({ stage, search: debounced, limit: 100 });
       setReports(list || []);
     } catch {
       setFailed(true);
@@ -33,12 +33,12 @@ export default function Reports() {
       setLoading(false);
       firstLoad.current = false;
     }
-  }, [status, debounced]);
+  }, [stage, debounced]);
 
   useEffect(() => { load(); }, [load]);
 
   const counts = useMemo(() => reports.length, [reports]);
-  const filtering = status !== 'All' || debounced !== '';
+  const filtering = stage !== '' || debounced !== '';
 
   return (
     <div className="container stack gap-20">
@@ -71,16 +71,16 @@ export default function Reports() {
           )}
         </div>
 
-        <div className="filter-bar" role="tablist" aria-label="Filter by status">
-          {STATUS_FILTERS.map((s) => (
+        <div className="filter-bar" role="tablist" aria-label="Filter by progress">
+          {STAGE_FILTERS.map((s) => (
             <button
-              key={s}
+              key={s.key}
               role="tab"
-              aria-selected={status === s}
-              className={`chip ${status === s ? 'active' : ''}`}
-              onClick={() => setStatus(s)}
+              aria-selected={stage === s.key}
+              className={`chip ${stage === s.key ? 'active' : ''}`}
+              onClick={() => setStage(s.key)}
             >
-              {s}
+              {s.label}
             </button>
           ))}
         </div>
@@ -115,12 +115,12 @@ export default function Reports() {
             title={filtering ? 'Nothing matches those filters' : 'No reports yet'}
             message={
               filtering
-                ? 'Try a different search term or clear the status filter.'
+                ? 'Try a different search term or clear the filter.'
                 : 'When you report a violation it will appear here so you can follow its progress.'
             }
             action={
               filtering ? (
-                <button className="btn btn-outline" onClick={() => { setSearch(''); setStatus('All'); }}>
+                <button className="btn btn-outline" onClick={() => { setSearch(''); setStage(''); }}>
                   Clear filters
                 </button>
               ) : (

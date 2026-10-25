@@ -1,7 +1,58 @@
 const mongoose = require('mongoose');
 const reportSchema = require('./schemas/reportSchema');
+const { COLLECTIONS } = require('./shared');
 
 const Report = mongoose.models.Report || mongoose.model('Report', reportSchema);
+
+/** Report stages as the citizen sees them, from the police's latest update. */
+const STAGES = ['waiting', 'review', 'closed'];
+const CLOSED_TYPES = ['action_taken', 'closed_no_action', 'rejected'];
+
+/**
+ * Adds `stage` to each report: `waiting` when the police asked a question,
+ * `closed` once they finished, `review` otherwise. Taken from the latest
+ * `report_updates` entry (reward lines aside); reports from before the admin
+ * system wrote updates fall back to their three-value status.
+ */
+const withStage = [
+  {
+    $lookup: {
+      from: COLLECTIONS.reportUpdates,
+      let: { id: '$_id' },
+      pipeline: [
+        { $match: { $expr: { $eq: ['$reportId', '$$id'] }, type: { $ne: 'reward' } } },
+        { $sort: { at: -1 } },
+        { $limit: 1 },
+        { $project: { _id: 0, type: 1 } },
+      ],
+      as: 'latestStage',
+    },
+  },
+  { $addFields: { latestType: { $first: '$latestStage.type' } } },
+  {
+    $addFields: {
+      stage: {
+        $switch: {
+          branches: [
+            { case: { $eq: ['$latestType', 'needs_info'] }, then: 'waiting' },
+            { case: { $in: ['$latestType', CLOSED_TYPES] }, then: 'closed' },
+            {
+              case: {
+                $and: [
+                  { $eq: [{ $ifNull: ['$latestType', null] }, null] },
+                  { $in: ['$status', ['Completed', 'Rejected']] },
+                ],
+              },
+              then: 'closed',
+            },
+          ],
+          default: 'review',
+        },
+      },
+    },
+  },
+  { $project: { latestStage: 0, latestType: 0 } },
+];
 
 /** Data-access layer for violation reports. */
 class ReportModel {
@@ -12,64 +63,76 @@ class ReportModel {
     return report;
   }
 
+  /** A user's report by the id their device gave it, or null. */
+  async findByClientId(userId, clientReportId) {
+    const report = await Report.findOne({ userId, clientReportId }).lean();
+    return report ? normalise(report) : null;
+  }
+
+  /** How many reports a user sent since a moment (the daily limit). */
+  async countSince(userId, since) {
+    return Report.countDocuments({ userId, createdAt: { $gte: since } });
+  }
+
   /**
-   * Lists one user's reports, newest first.
-   * Supports optional status filter, free-text search and pagination.
+   * Lists one user's reports, newest first, each with its stage.
+   * Supports an optional stage filter, free-text search and pagination.
    */
-  async getUserReports(userId, { status, search, page = 1, limit = 50 } = {}) {
-    const query = { userId };
-    if (status && status !== 'All') query.status = status;
+  async getUserReports(userId, { stage, search, page = 1, limit = 50 } = {}) {
+    const match = { userId: new mongoose.Types.ObjectId(String(userId)) };
     if (search) {
       const rx = new RegExp(String(search).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-      query.$or = [
+      match.$or = [
         { vehicleNumber: rx },
         { issueType: rx },
         { location: rx },
+        { description: rx },
         { additionalDetails: rx },
         { vehicleModel: rx },
       ];
     }
 
-    const skip = (Math.max(1, Number(page)) - 1) * Number(limit);
-    const [reports, total] = await Promise.all([
-      Report.find(query).sort({ createdAt: -1 }).skip(skip).limit(Number(limit)).lean(),
-      Report.countDocuments(query),
+    const size = Math.min(100, Math.max(1, Number(limit) || 50));
+    const skip = (Math.max(1, Number(page) || 1) - 1) * size;
+    const [result] = await Report.aggregate([
+      { $match: match },
+      ...withStage,
+      ...(STAGES.includes(stage) ? [{ $match: { stage } }] : []),
+      { $sort: { createdAt: -1 } },
+      {
+        $facet: {
+          reports: [{ $skip: skip }, { $limit: size }],
+          total: [{ $count: 'n' }],
+        },
+      },
     ]);
 
-    return { reports: reports.map(normalise), total };
+    return { reports: result.reports.map(normalise), total: result.total[0]?.n || 0 };
   }
 
-  /** Fetches a single report by id. */
+  /** Fetches a single report by id, with its stage. */
   async getReportById(reportId) {
     if (!mongoose.Types.ObjectId.isValid(reportId)) return null;
-    const report = await Report.findById(reportId).lean();
+    const [report] = await Report.aggregate([
+      { $match: { _id: new mongoose.Types.ObjectId(String(reportId)) } },
+      ...withStage,
+    ]);
     return report ? normalise(report) : null;
   }
 
-  /** Per-status counts for a user's dashboard. */
+  /** Per-stage counts for a user's dashboard. */
   async getUserStats(userId) {
     const rows = await Report.aggregate([
       { $match: { userId: new mongoose.Types.ObjectId(String(userId)) } },
-      { $group: { _id: '$status', count: { $sum: 1 } } },
+      ...withStage,
+      { $group: { _id: '$stage', count: { $sum: 1 } } },
     ]);
 
     const by = Object.fromEntries(rows.map((r) => [r._id, r.count]));
-    const completed = by['Completed'] || 0;
-    const inProgress = by['In Progress'] || 0;
-    const rejected = by['Rejected'] || 0;
-
-    return {
-      total: completed + inProgress + rejected,
-      completed,
-      inProgress,
-      rejected,
-    };
-  }
-
-  /** All reports, newest first (admin-side helper). */
-  async getAllReports() {
-    const reports = await Report.find({}).sort({ createdAt: -1 }).lean();
-    return reports.map(normalise);
+    const waiting = by.waiting || 0;
+    const review = by.review || 0;
+    const closed = by.closed || 0;
+    return { total: waiting + review + closed, waiting, review, closed };
   }
 }
 
@@ -84,3 +147,4 @@ function normalise(report) {
 
 module.exports = new ReportModel();
 module.exports.Report = Report;
+module.exports.STAGES = STAGES;

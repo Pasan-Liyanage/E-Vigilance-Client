@@ -3,16 +3,20 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { Field } from '../components/ui';
-import { Mail, Lock, User, IdCard, Phone, Eye, EyeOff, ChevronRight, Check } from '../components/Icons';
+import { Mail, Lock, User, IdCard, Phone, Eye, EyeOff, ChevronRight, Check, Calendar } from '../components/Icons';
 import Logo, { LogoPlate } from '../components/Logo';
 
-/** Sri Lankan NIC: 9 digits + V/X, or the 12-digit form. */
+/** Sri Lankan NIC: 9 digits + V/X, or the 12-digit form (spaces allowed). */
 const NIC_RE = /^(\d{9}[VvXx]|\d{12})$/;
+/** A Sri Lankan mobile number: 07X XXX XXXX, or with +94 in front. */
+const MOBILE_RE = /^(?:\+?94|0)?7\d{8}$/;
+const compact = (v) => v.replace(/[\s\-()]/g, '');
+const MIN_PASSWORD = 8;
 
 const strength = (pw) => {
   let score = 0;
-  if (pw.length >= 6) score++;
-  if (pw.length >= 10) score++;
+  if (pw.length >= MIN_PASSWORD) score++;
+  if (pw.length >= 12) score++;
   if (/[A-Z]/.test(pw) && /[a-z]/.test(pw)) score++;
   if (/\d/.test(pw)) score++;
   if (/[^A-Za-z0-9]/.test(pw)) score++;
@@ -26,7 +30,10 @@ export default function Signup() {
   const toast = useToast();
   const navigate = useNavigate();
 
-  const [form, setForm] = useState({ name: '', email: '', nic: '', phone: '', password: '', confirm: '' });
+  const [form, setForm] = useState({
+    name: '', email: '', nic: '', dateOfBirth: '', phone: '', password: '', confirm: '',
+  });
+  const today = new Date().toISOString().slice(0, 10);
   const [errors, setErrors] = useState({});
   const [showPw, setShowPw] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -45,14 +52,18 @@ export default function Signup() {
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) e.email = 'That email does not look right.';
 
     if (!form.nic.trim()) e.nic = 'Enter your NIC number.';
-    else if (!NIC_RE.test(form.nic.trim())) e.nic = 'Use 9 digits and a letter (e.g. 991234567V) or 12 digits.';
+    else if (!NIC_RE.test(compact(form.nic))) e.nic = 'Use 9 digits and a letter (e.g. 991234567V) or 12 digits.';
 
-    if (form.phone.trim() && !/^[0-9+\-\s()]{9,15}$/.test(form.phone.trim())) {
-      e.phone = 'That phone number does not look right.';
+    if (!form.dateOfBirth) e.dateOfBirth = 'Enter your date of birth.';
+    else if (form.dateOfBirth > today) e.dateOfBirth = 'The date of birth cannot be in the future.';
+
+    if (!form.phone.trim()) e.phone = 'Enter your mobile number.';
+    else if (!MOBILE_RE.test(compact(form.phone))) {
+      e.phone = 'Enter a Sri Lankan mobile number, for example 077 123 4567.';
     }
 
     if (!form.password) e.password = 'Choose a password.';
-    else if (form.password.length < 6) e.password = 'Use at least 6 characters.';
+    else if (form.password.length < MIN_PASSWORD) e.password = `Use at least ${MIN_PASSWORD} characters.`;
 
     if (form.confirm !== form.password) e.confirm = 'The two passwords do not match.';
 
@@ -69,8 +80,9 @@ export default function Signup() {
       const user = await signUp({
         name: form.name.trim(),
         email: form.email.trim(),
-        nic: form.nic.trim().toUpperCase(),
-        phone: form.phone.trim() || undefined,
+        nic: compact(form.nic).toUpperCase(),
+        dateOfBirth: form.dateOfBirth,
+        phone: form.phone.trim(),
         password: form.password,
       });
       toast.success(`Account created. Welcome, ${user.name.split(' ')[0]}!`);
@@ -79,6 +91,9 @@ export default function Signup() {
       toast.error(err.message);
       if (/email/i.test(err.message)) setErrors({ email: err.message });
       else if (/nic/i.test(err.message)) setErrors({ nic: err.message });
+      else if (/mobile|phone/i.test(err.message)) setErrors({ phone: err.message });
+      else if (/birth/i.test(err.message)) setErrors({ dateOfBirth: err.message });
+      else if (/password/i.test(err.message)) setErrors({ password: err.message });
     } finally {
       setBusy(false);
     }
@@ -148,7 +163,18 @@ export default function Signup() {
               </div>
             </Field>
 
-            <Field label="Phone number" error={errors.phone} hint="Optional — helps the authority reach you" htmlFor="phone">
+            <Field label="Date of birth" required error={errors.dateOfBirth}
+              hint="As on your NIC. It is checked against your NIC number." htmlFor="dob">
+              <div className="input-group">
+                <span className="lead"><Calendar size={18} /></span>
+                <input id="dob" type="date" autoComplete="bday" max={today}
+                  className={`input ${errors.dateOfBirth ? 'invalid' : ''}`}
+                  value={form.dateOfBirth} onChange={set('dateOfBirth')} disabled={busy} />
+              </div>
+            </Field>
+
+            <Field label="Mobile number" required error={errors.phone}
+              hint="You will verify it with a code. The police may call you about a report." htmlFor="phone">
               <div className="input-group">
                 <span className="lead"><Phone size={18} /></span>
                 <input id="phone" type="tel" inputMode="tel" autoComplete="tel"
@@ -162,7 +188,7 @@ export default function Signup() {
                 <span className="lead"><Lock size={18} /></span>
                 <input id="pw" type={showPw ? 'text' : 'password'} autoComplete="new-password"
                   className={`input ${errors.password ? 'invalid' : ''}`}
-                  placeholder="At least 6 characters" value={form.password} onChange={set('password')} disabled={busy} />
+                  placeholder={`At least ${MIN_PASSWORD} characters`} value={form.password} onChange={set('password')} disabled={busy} />
                 <button type="button" className="trail" onClick={() => setShowPw((s) => !s)}
                   aria-label={showPw ? 'Hide password' : 'Show password'}>
                   {showPw ? <EyeOff size={17} /> : <Eye size={17} />}

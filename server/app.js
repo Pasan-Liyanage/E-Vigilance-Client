@@ -15,6 +15,8 @@ const authRoutes = require('./src/routes/authRoutes');
 const reportRoutes = require('./src/routes/reportRoutes');
 const mediaRoutes = require('./src/routes/mediaRoutes');
 const uploadRoutes = require('./src/routes/uploadRoutes');
+const offenceRoutes = require('./src/routes/offenceRoutes');
+const rewardRoutes = require('./src/routes/rewardRoutes');
 
 const app = express();
 
@@ -84,6 +86,19 @@ const credentialLimiter = rateLimit({
 app.use('/api/auth/login', credentialLimiter);
 app.use('/api/auth/register', credentialLimiter);
 
+// One-time codes reach a phone and payout requests move money: each gets its
+// own small hourly budget, so one can't use up the other's.
+const hourlyLimiter = (max) =>
+  rateLimit({
+    windowMs: 60 * 60 * 1000,
+    max,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { message: 'Too many requests. Please try again later.' },
+  });
+app.use('/api/auth/phone', hourlyLimiter(10));
+app.use('/api/rewards/payouts', hourlyLimiter(10));
+
 /* --------------------------------- Routes -------------------------------- */
 const apiInfo = (req, res) => {
   res.json({
@@ -97,11 +112,19 @@ const apiInfo = (req, res) => {
       'POST /api/auth/login': 'Sign in',
       'GET  /api/auth/me': 'Current user (Bearer token)',
       'PATCH /api/auth/me': 'Update profile',
+      'DELETE /api/auth/me': 'Delete the account (password required)',
+      'POST /api/auth/phone/code': 'Send a one-time code to the phone',
+      'POST /api/auth/phone/verify': 'Verify the phone with the code',
+      'GET  /api/offences': 'Offences a citizen can report',
+      'GET  /api/rewards': 'Reward balance, lines, payouts and eligibility',
+      'POST /api/rewards/payouts': 'Ask for a payout',
       'POST /api/uploads': 'Signed URL for uploading one file straight to R2',
       'POST /api/reports': 'Submit a violation report (multipart or JSON)',
       'GET  /api/reports': "List the user's reports",
       'GET  /api/reports/stats': 'Dashboard counters',
       'GET  /api/reports/:id': 'One report',
+      'GET  /api/reports/:id/updates': "The police's updates on a report",
+      'POST /api/reports/:id/reply': "Answer the police's question",
       'GET  /api/media/r2/:key': 'Redirect to a signed R2 evidence URL',
       'GET  /api/media/:id': 'Stream GridFS evidence',
     },
@@ -115,6 +138,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/media', mediaRoutes);
 app.use('/api/uploads', uploadRoutes);
+app.use('/api/offences', offenceRoutes);
+app.use('/api/rewards', rewardRoutes);
 
 /* ------------------- Serve the built PWA (production) --------------------
  * When web/dist exists the API and the PWA are served from one origin, so no

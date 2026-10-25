@@ -37,15 +37,24 @@ export default function ReportCard({ report }) {
       <div className="grow stack gap-6" style={{ minWidth: 0 }}>
         <div className="between gap-8">
           <span className="strong truncate">{report.vehicleNumber}</span>
-          <StatusBadge status={report.status} size="sm" />
+          <StatusBadge report={report} size="sm" />
         </div>
 
         <span className="small muted truncate">{report.issueType}</span>
 
+        {report.stage === 'waiting' && (
+          <span className="tiny strong" style={{ color: 'var(--amber)' }}>
+            The police have a question for you
+          </span>
+        )}
+
         <div className="row gap-12 wrap tiny subtle" style={{ minWidth: 0 }}>
           <span className="row gap-4">
-            <Calendar size={12} style={{ flex: 'none' }} /> {fmtDate(report.dateTime)}
+            <Calendar size={12} style={{ flex: 'none' }} /> {fmtDate(report.occurredAt || report.dateTime)}
           </span>
+          {report.latestUpdate?.reportNumber && (
+            <span className="mono">{report.latestUpdate.reportNumber}</span>
+          )}
           {report.voiceNote && (
             <span className="row gap-4"><Mic size={12} style={{ flex: 'none' }} /> Voice</span>
           )}

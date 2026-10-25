@@ -77,6 +77,10 @@ Everything lives in `server/.env` (copy from `server/.env.example`).
 | `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` | An R2 API token with object read & write on the bucket |
 | `R2_BUCKET` / `R2_PREFIX` | Bucket (default `e-vigilance`) and top-level folder (default `evidence`) |
 | `PUBLIC_BASE_URL` | Optional — absolute origin used when building media URLs |
+| `SMS_PROVIDER` | `console` (development: codes go to the server log), `demo` (demonstrations: the app shows the code, see [DEMO.md](DEMO.md)) or `none` (default in production until a provider is added) |
+| `MEDIA_ACCESS` | `public` (default) or `signed` — see [Evidence links](#9-security-notes) |
+| `MEDIA_SIGNING_SECRET` | Signs owners' media links; defaults to `JWT_SECRET` |
+| `MEDIA_SERVICE_KEY` | Shared with the admin backend (its `APP_MEDIA_KEY`) so its import can download evidence |
 
 The frontend needs no configuration for local work (Vite proxies `/api` to the server).
 If you host the PWA separately from the API, set `VITE_API_URL` in `web/.env`.
@@ -254,24 +258,38 @@ All authenticated routes need `Authorization: Bearer <token>`.
 
 | Method | Endpoint | Auth | Body | Purpose |
 |---|---|---|---|---|
-| `POST` | `/api/auth/register` | – | JSON: `name, email, nic, phone?, password` | Create account → `{ token, user }` |
+| `POST` | `/api/auth/register` | – | JSON: `name, email, nic, phone, dateOfBirth, password` | Create account → `{ token, user }` |
 | `POST` | `/api/auth/login` | – | JSON: `email, password` | Sign in → `{ token, user }` |
 | `GET` | `/api/auth/me` | ✓ | – | Current user (restores a session) |
-| `PATCH` | `/api/auth/me` | ✓ | JSON: `name?, phone?` | Update profile |
+| `PATCH` | `/api/auth/me` | ✓ | JSON: `name?, phone?` | Update profile (a new phone must be verified again) |
+| `DELETE` | `/api/auth/me` | ✓ | JSON: `password` | Delete the account (personal details removed, reports kept) |
+| `POST` | `/api/auth/phone/code` | ✓ | – | Text a 6-digit code to the phone → `{ sentTo, expiresInMinutes }` |
+| `POST` | `/api/auth/phone/verify` | ✓ | JSON: `code` | Verify the phone → `{ user }` |
+| `GET` | `/api/offences` | ✓ | – | Offences a citizen can report → `{ offences: [{ code, name, description, vehicleTypes }] }` |
 | `POST` | `/api/uploads` | ✓ | JSON: `name, type, size, kind?` | Signed URL to PUT one file into R2 → `{ key, uploadUrl, contentType }` |
-| `POST` | `/api/reports` | ✓ | `multipart/form-data` or JSON | Create a report |
-| `GET` | `/api/reports` | ✓ | `?status=&search=&page=&limit=` | The user's reports |
-| `GET` | `/api/reports/stats` | ✓ | – | `{ total, completed, inProgress, rejected }` |
+| `POST` | `/api/reports` | ✓ | `multipart/form-data` or JSON | Create a report → `201`, or `200` with `duplicate: true` for a `clientReportId` already received |
+| `GET` | `/api/reports` | ✓ | `?stage=waiting\|review\|closed&search=&page=&limit=` | The user's reports, each with `stage` and `latestUpdate` |
+| `GET` | `/api/reports/stats` | ✓ | – | `{ total, waiting, review, closed }` |
 | `GET` | `/api/reports/:id` | ✓ | – | One report (403 if not yours) |
+| `GET` | `/api/reports/:id/updates` | ✓ | – | The police's updates, and their open question → `{ updates, question: { text, at, answered } \| null }` |
+| `POST` | `/api/reports/:id/reply` | ✓ | JSON: `answer` (≤1000) | Answer the open question (once) |
+| `GET` | `/api/rewards` | ✓ | – | Balance, points, payouts and eligibility → `{ rewards }` |
+| `POST` | `/api/rewards/payouts` | ✓ | JSON: `method (bank\|wallet), accountNumber, accountName, bankName?` | Ask for a payout |
 | `GET` | `/api/media/r2/:key` | – | – | Redirect to a signed R2 URL for that file |
 | `GET` | `/api/media/:id` | – | – | Stream GridFS media (supports `Range`) |
 | `GET` | `/api/health` | – | – | Liveness probe |
 
-**`POST /api/reports` fields** — files under `evidence` (repeatable, ≤10) and `voiceNote` (≤1);
-text fields `vehicleType*`, `vehicleNumber*`, `vehicleModel`, `dateTime*` (ISO), `issueType*`,
-`location`, `latitude`, `longitude`, `additionalDetails`. `*` = required. As JSON, send the same
-text fields with `evidence: [{ key, originalName }]` and `voiceNote: { key, originalName }`
-using keys from `POST /api/uploads`.
+**`POST /api/reports` fields** (the admin system's contract, its docs/11 §4) — files under
+`evidence` (repeatable, ≤10) and `voiceNote` (≤1); text fields `clientReportId`,
+`vehicleType*`, `vehicleNumber*`, `vehicleModel`, `offenceIds*` (1–5 codes from
+`GET /api/offences`; JSON text in a multipart form), `occurredAt*` (ISO, within 30 days),
+`injuries`, `description*` (10–2000), `latitude*`, `longitude*` (inside Sri Lanka), `location`,
+and `evidenceMeta` (multipart only: `[{ capturedInApp, capturedAt }]`, one per file, in order).
+`*` = required. As JSON, send the same fields with `evidence: [{ key, originalName,
+capturedInApp, capturedAt }]` and `voiceNote: { key, originalName }` using keys from
+`POST /api/uploads`. Builds from before the contract may still send `issueType`, `dateTime` and
+`additionalDetails` instead. Limits: 20 reports a day; photos 25 MB, audio 100 MB; a suspended
+account gets `403`.
 
 ---
 
@@ -306,6 +324,15 @@ voiceNote: { …same shape… }
 
 `evidencePath` is still set to the first photo's URL, so **existing admin screens keep working
 untouched** while the PWA can show every attachment.
+
+Reports also carry the contract fields `clientReportId`, `offenceIds`, `occurredAt`, `injuries`
+and `description`, and each media item `capturedInApp` and `capturedAt`. Users carry
+`dateOfBirth`, `phoneVerified`, `nicVerified` and, once deleted, `deletedAt`.
+
+**Shared with the new admin system** (`server/src/models/shared.js`; one writer per collection,
+its docs/11 §3): this app reads `report_updates`, `reward_accounts` and
+`offence_schedule_public`, and writes `report_replies`, `payout_requests` and
+`account_deletions`. See `ADMIN-SYSTEM-GAPS.md` for what remains.
 
 ---
 
@@ -467,7 +494,15 @@ them, so when checking layout, disable it first.
 - JWT required on every report route; `GET/POST /api/reports*` are scoped to `req.userId`,
   and fetching someone else's report returns **403**.
 - Login and registration are rate-limited (30 attempts / 15 min per IP). `GET /api/auth/me`
-  is deliberately *not* limited, since it runs on every page load.
+  is deliberately *not* limited, since it runs on every page load. Phone codes and payout
+  requests each have their own limit of 10 an hour.
+- Phone codes are stored only as a keyed hash, expire after 10 minutes and allow 5 tries.
+- **Evidence links.** With `MEDIA_ACCESS=public` anyone holding a media link can open it. With
+  `MEDIA_ACCESS=signed`, links are signed for the report's owner and valid for an hour; the
+  admin system's import sends `X-Media-Key: MEDIA_SERVICE_KEY`. Keep `public` while the previous
+  admin panel, which shows evidence from these links, is in use.
+- A deleted account loses its personal details at once and can't sign in; its reports stay as
+  police records without them.
 - Uploads are capped by count (10 + 1) and size, and filtered to image/video/audio types.
 - CORS is restricted to `CORS_ORIGINS` in production; any LAN origin is allowed in development
   so a phone can connect.
